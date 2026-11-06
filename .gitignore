@@ -1,0 +1,22 @@
+# --- Datasets: too large for GitHub (100 MB hard file limit) ----------------
+# CCPD2019 is published data; the degraded grid is regenerated from plates.npz
+# in ~11 minutes with `python -m license_plate_restoration.degradation --grid`.
+CCPD2019/
+CCPD2019.tar.xz
+license_plate_restoration/data/degraded/
+
+# --- Regenerable artifacts --------------------------------------------------
+__pycache__/
+*.py[cod]
+.pytest_cache/
+.hypothesis/
+*.egg-info/
+build/
+dist/
+
+# --- Editors / OS -----------------------------------------------------------
+.idea/
+.vscode/
+*.swp
+Thumbs.db
+.DS_Store
