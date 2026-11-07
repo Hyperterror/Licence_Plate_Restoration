@@ -1,4 +1,4 @@
-"""Step 4.1-4.3 -- restoration: validation, response, taper, inverse, Wiener.
+"""Step 4.1-4.4 -- restoration: validation, response, taper, inverse, Wiener, CLS.
 
 This module holds the pieces that *all four* restoration algorithms share plus
 the first three of them:
@@ -19,12 +19,14 @@ the first three of them:
 * :func:`wiener_filter` / :func:`wiener_k_from_bsnr` -- step 4.3's minimum mean
   square error filter, ``\\hat{F} = H^{*} G / (|H|^{2} + K)``, and the BSNR to
   ``K`` conversion -- an observed-power heuristic built on
-  ``degradation.noise_sigma``, audited in section 16 of the docs.
+  ``degradation.noise_sigma``, audited in section 16 of the docs;
+* :func:`cls_filter` -- step 4.4's Constrained Least Squares filter,
+  ``\\hat{F} = H^{*} G / (|H|^{2} + \\lambda |C|^{2})``, using the 4-neighbour
+  discrete Laplacian constraint operator.
 
-Constrained least squares and Richardson--Lucy are deliberately *not* here
-(steps 4.4-4.5).  They reduce to the same recipe -- "build ``H`` with
-:func:`psf_frequency_response`, filter the tapered image, clip the result" --
-which is exactly the surface this module exposes.
+Richardson--Lucy is deliberately *not* here (step 4.5).  It reduces to the same
+recipe -- "build ``H`` with :func:`psf_frequency_response`, filter the tapered
+image, clip the result" -- which is exactly the surface this module exposes.
 
 Inherited conventions (do not re-derive, do not change)
 -------------------------------------------------------
@@ -163,6 +165,15 @@ CENTRE_OFFSET_TOL = 0.05
 # ``docs/restoration_foundation.md``), which is the caller's choice, not a
 # silent default.
 DEFAULT_EPS = 1e-12
+
+# Standard four-neighbour discrete Laplacian kernel for Constrained Least
+# Squares (step 4.4).  Sums to 0 (so C(0, 0) = 0, DC is unpenalized) and has
+# negative neighbours, so it must never pass through :func:`validate_psf`.
+DEFAULT_LAPLACIAN = np.array([
+    [ 0.0, -1.0,  0.0],
+    [-1.0,  4.0, -1.0],
+    [ 0.0, -1.0,  0.0],
+], dtype=np.float32)
 
 
 # --------------------------------------------------------------------------- #
@@ -561,6 +572,95 @@ def psf_centre_offset(psf, tol: float = PSF_SUM_TOL) -> tuple[float, float]:
         If the kernel fails :func:`validate_psf`.
     """
     return _centre_offset(validate_psf(psf, tol=tol, require_odd=False))
+
+
+def operator_frequency_response(operator, image_shape) -> np.ndarray:
+    """Sampled frequency response of a 2-D spatial operator on ``image_shape``.
+
+    Unlike :func:`psf_frequency_response`, this helper accepts signed,
+    zero-sum kernels (such as the Laplacian constraint in Constrained Least
+    Squares) that must not be normalised or validated as energy-preserving
+    probability distributions.
+
+    The kernel is zero-padded to ``image_shape`` with the kernel placed at the
+    top-left corner, and then circularly shifted by ``(-(kh // 2), -(kw // 2))``
+    so that its centre pixel lands on the FFT origin ``(0, 0)``.  The 2-D DFT
+    is computed with ``np.fft.fft2``, ensuring exact grid alignment with
+    :func:`psf_frequency_response`.
+
+    Parameters
+    ----------
+    operator:
+        A 2-D real array representing the spatial convolution operator.
+    image_shape:
+        Target ``(rows, cols)`` matching the image to be restored.
+
+    Returns
+    -------
+    np.ndarray
+        ``complex128`` array of shape ``image_shape``.
+
+    Raises
+    ------
+    ValueError
+        If ``operator`` is not 2-D, is empty, contains non-finite values, or
+        is larger than ``image_shape``.
+    """
+    rows, cols = validate_image_shape(image_shape)
+    array = _as_float_array(operator, "operator")
+    if array.ndim != 2:
+        raise ValueError(
+            f"operator must be a 2-D array, got shape {array.shape}"
+        )
+    if array.size == 0:
+        raise ValueError(
+            f"operator is empty (shape {array.shape}); need at least 1x1"
+        )
+    non_finite = _count_non_finite(array)
+    if non_finite:
+        raise ValueError(
+            f"operator has {non_finite} non-finite value(s) (NaN or inf)"
+        )
+    k_rows, k_cols = array.shape
+    if k_rows > rows or k_cols > cols:
+        raise ValueError(
+            f"operator {array.shape} does not fit in a {rows}x{cols} image; "
+            "it must be no larger than the image"
+        )
+
+    padded = np.zeros((rows, cols), dtype=np.float64)
+    padded[:k_rows, :k_cols] = array
+    centred = np.roll(padded, (-(k_rows // 2), -(k_cols // 2)), axis=(0, 1))
+    return np.fft.fft2(centred)
+
+
+def laplacian_frequency_response(image_shape) -> np.ndarray:
+    """Frequency response C(u, v) of the standard 4-neighbour Laplacian.
+
+    The kernel is :data:`DEFAULT_LAPLACIAN`::
+
+        c = [[ 0, -1,  0],
+             [-1,  4, -1],
+             [ 0, -1,  0]]
+
+    with sum(c) = 0, so C(0, 0) = 0.  Its response is purely real and
+    non-negative everywhere:
+
+    .. math:: C(u, v) = 4 - 2 \\cos\\left(\\frac{2\\pi u}{M}\\right)
+                        - 2 \\cos\\left(\\frac{2\\pi v}{N}\\right)
+                        \\in [0, 8] .
+
+    Parameters
+    ----------
+    image_shape:
+        Target ``(rows, cols)`` matching the image grid.
+
+    Returns
+    -------
+    np.ndarray
+        ``complex128`` array of shape ``image_shape``.
+    """
+    return operator_frequency_response(DEFAULT_LAPLACIAN, image_shape)
 
 
 # --------------------------------------------------------------------------- #
@@ -1482,6 +1582,119 @@ def wiener_filter(image, psf, K: float | None = None, *,
     # clause only has work to do for K == 0 at an exact null of H: 0 / 0 is
     # defined there as zero gain (see the docstring), never a division by zero.
     denominator = np.abs(response) ** 2 + constant
+    estimate = np.divide(np.conj(response) * spectrum, denominator,
+                         out=np.zeros_like(spectrum), where=denominator > 0)
+    restored = np.real(np.fft.ifft2(estimate))
+    return clip_unit_interval(restored, name="restored image")
+
+
+# --------------------------------------------------------------------------- #
+# Constrained Least Squares restoration (step 4.4)
+# --------------------------------------------------------------------------- #
+def cls_filter(image, psf, regularization: float, *,
+               width: int | None = None,
+               fraction: float = DEFAULT_TAPER_FRACTION,
+               profile: str = DEFAULT_INVERSE_TAPER,
+               centre: str = DEFAULT_CENTRE_MODE,
+               require_odd: bool = False,
+               tol: float = PSF_SUM_TOL) -> np.ndarray:
+    """Restore a degraded image using Constrained Least Squares (CLS) deconvolution.
+
+    CLS (also known as regularised inverse filtering) finds the estimate
+    :math:`\\hat{f}` that minimises the roughness penalty
+    :math:`\\|c * f\\|_2^2` subject to the residual fidelity constraint
+    :math:`\\|g - h * f\\|_2^2 = \\|n\\|_2^2`, where :math:`c` is the 2-D
+    discrete Laplacian operator.  In the frequency domain, the solution is
+
+    .. math:: \\hat{F}(u, v) = \\frac{H^*(u, v) G(u, v)}
+                                  {|H(u, v)|^2 + \\lambda |C(u, v)|^2}
+
+    where:
+    * :math:`G(u, v)` is the DFT of the (optionally tapered) degraded image;
+    * :math:`H(u, v)` is the transfer function of the degradation PSF,
+      computed via :func:`psf_frequency_response`;
+    * :math:`C(u, v)` is the transfer function of the 4-neighbour discrete
+      Laplacian, computed via :func:`laplacian_frequency_response`;
+    * :math:`\\lambda \\ge 0` is the regularisation parameter
+      (``regularization``).
+
+    **Difference from Wiener filtering.**  Wiener filtering adds a constant
+    scalar :math:`K` across all frequencies, assuming a flat signal spectrum.
+    CLS regularises with :math:`\\lambda |C(u, v)|^2`:
+    * At DC :math:`(0, 0)`, :math:`C(0, 0) = 0`, so the DC gain is exactly 1.0
+      and mean brightness is strictly preserved;
+    * At low frequencies, :math:`|C(u, v)|^2` is small, so signal details pass
+      unattenuated;
+    * At high frequencies, :math:`|C(u, v)|^2` rises up to 64, heavily
+      penalising noise amplification and high-frequency ringing.
+
+    **Denominator and numerical behaviour.**
+    For :math:`\\lambda > 0`, the denominator :math:`|H|^2 + \\lambda |C|^2`
+    is strictly positive everywhere on the grid (since :math:`|H(0,0)| = 1` at
+    DC, and :math:`|C(u,v)| > 0` for all :math:`(u,v) \\ne (0,0)`).  No
+    denominator floor is needed or applied.  At :math:`\\lambda = 0`, the filter
+    reduces to the unregularised inverse filter :math:`G / H`; at exact
+    frequency nulls (:math:`H(u,v) = 0`), the output is explicitly set to zero
+    gain (:math:`0 / 0 \\to 0`), matching :func:`wiener_filter`.
+
+    Parameters
+    ----------
+    image:
+        Degraded 2-D image, validated by :func:`validate_image`.
+    psf:
+        Blur kernel, consumed as-is without renormalisation or modification,
+        validated by :func:`validate_psf`.
+    regularization:
+        Non-negative regularisation parameter :math:`\\lambda`.  Must be a
+        finite scalar :math:`\\ge 0`.  A value of 0 is the unregularised inverse
+        filter; larger values apply stronger smoothness regularisation.
+    width, fraction, profile:
+        Forwarded to :func:`taper_edges`.  Default profile is
+        :data:`DEFAULT_INVERSE_TAPER` (``"none"``) because plate images carry
+        an 8 px margin, making circular convolution exact.
+    centre:
+        ``"auto"`` (default) or ``"pixel"``, forwarded to
+        :func:`psf_frequency_response`.
+    require_odd:
+        Enforce odd-sized PSF convention.  Defaults to ``False`` to accept
+        stored even-sided factor-2 kernels.
+    tol:
+        Tolerance on ``sum(psf) == 1``.
+
+    Returns
+    -------
+    np.ndarray
+        Restored ``float32`` image of the same shape as ``image``, with all
+        values finite and clipped to ``[0, 1]``.
+
+    Raises
+    ------
+    ValueError
+        If ``regularization`` is negative, non-finite, or not a number; if
+        ``image`` is invalid; if ``psf`` fails validation; or if taper/centre
+        parameters are invalid.
+
+    Examples
+    --------
+    >>> import numpy as np
+    >>> image = np.full((16, 16), 0.5, dtype=np.float32)
+    >>> delta = np.array([[1.0]], dtype=np.float32)
+    >>> np.allclose(cls_filter(image, delta, 0.0), image, atol=1e-6)
+    True
+    >>> np.allclose(cls_filter(image, delta, 1.0), image, atol=1e-6)
+    True
+    """
+    degraded = validate_image(image, name="image")
+    reg = _finite_scalar(regularization, "regularization", minimum=0.0)
+
+    response = psf_frequency_response(psf, degraded.shape, tol=tol,
+                                      require_odd=require_odd, centre=centre)
+    laplacian_response = laplacian_frequency_response(degraded.shape)
+    windowed = taper_edges(degraded, width=width, fraction=fraction,
+                           profile=profile)
+    spectrum = np.fft.fft2(windowed.astype(np.float64))
+
+    denominator = np.abs(response) ** 2 + reg * (np.abs(laplacian_response) ** 2)
     estimate = np.divide(np.conj(response) * spectrum, denominator,
                          out=np.zeros_like(spectrum), where=denominator > 0)
     restored = np.real(np.fft.ifft2(estimate))
