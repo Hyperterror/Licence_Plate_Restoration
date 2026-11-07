@@ -193,8 +193,8 @@ def run_poisson_noise_experiment(seeds: list[int], psf: np.ndarray,
     Uses calibrated photometric headroom scaling (s_scale=0.70) so that
     Poisson count realizations C ~ Poisson(photons * s_scale * blurred)
     strictly satisfy the public API image contract (values in [0, 1])
-    with an exceedance probability upper-bounded by P(C > N) <= 2.3e-25 per pixel
-    and P(frame > 1.0) <= 7.4e-21 per 96x336 frame (11.3 sigma headroom at N=1000).
+    with an exceedance probability upper-bounded by P(C > N) < 2.5e-25 per pixel
+    and P(frame > 1.0) < 8.1e-21 per 96x336 frame (11.3 sigma headroom at N=1000).
 
     Effective Photon Budget:
     Because g = C / photons has E[g] = s * b and Var(g) = (s * b) / photons,
@@ -296,7 +296,7 @@ def run_poisson_noise_experiment(seeds: list[int], psf: np.ndarray,
             "effective_photon_fluxes": [int(round(p * s_scale)) for p in photon_fluxes],
             "effective_budget_mapping": effective_budgets,
             "effective_variance_derivation": "Var(g/s) = b / (photons * s) = b / N_eff; effective photon budget is N_eff = photons * s_scale",
-            "exceedance_probability_bound": "< 2.3e-25 per pixel, < 7.4e-21 per 96x336 frame at nominal 1000 photons under s=0.70 (11.3 sigma margin)",
+            "exceedance_probability_bound": "< 2.5e-25 per pixel, < 8.1e-21 per 96x336 frame at nominal 1000 photons under s=0.70 (11.3 sigma margin)",
             "exceedance_trials_failed": trials_failed,
             "clipping_policy": "Zero clipping on raw observation input. Realizations are strictly verified in [0, 1]; trials exceeding range raise a RuntimeError. Final unit-interval clipping applies only to rescaled restored estimate.",
             "api_limitation_note": "A bounded [0, 1] public API cannot represent unbounded Poisson distributions without either headroom scaling (which reduces effective photon budget to s*N) or silent upper-tail truncation (which introduces negative bias and cuts variance).",

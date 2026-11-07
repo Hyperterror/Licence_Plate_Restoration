@@ -617,7 +617,7 @@
         "20000": 14000
       },
       "effective_variance_derivation": "Var(g/s) = b / (photons * s) = b / N_eff; effective photon budget is N_eff = photons * s_scale",
-      "exceedance_probability_bound": "< 2.3e-25 per pixel, < 7.4e-21 per 96x336 frame at nominal 1000 photons under s=0.70 (11.3 sigma margin)",
+      "exceedance_probability_bound": "< 2.5e-25 per pixel, < 8.1e-21 per 96x336 frame at nominal 1000 photons under s=0.70 (11.3 sigma margin)",
       "exceedance_trials_failed": 0,
       "clipping_policy": "Zero clipping on raw observation input. Realizations are strictly verified in [0, 1]; trials exceeding range raise a RuntimeError. Final unit-interval clipping applies only to rescaled restored estimate.",
       "api_limitation_note": "A bounded [0, 1] public API cannot represent unbounded Poisson distributions without either headroom scaling (which reduces effective photon budget to s*N) or silent upper-tail truncation (which introduces negative bias and cuts variance).",
