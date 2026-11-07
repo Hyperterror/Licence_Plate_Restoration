@@ -1,7 +1,7 @@
-"""Step 4.1-4.4 -- restoration: validation, response, taper, inverse, Wiener, CLS.
+"""Step 4.1-4.5 -- restoration: validation, response, taper, inverse, Wiener, CLS, Richardson-Lucy.
 
-This module holds the pieces that *all four* restoration algorithms share plus
-the first three of them:
+This module holds the pieces that *all four* restoration algorithms share and
+implements all four of them:
 
 * :func:`validate_image` / :func:`validate_psf` / :func:`validate_image_shape`
   -- the integration contract, checked once at the entry point of every
@@ -22,11 +22,11 @@ the first three of them:
   ``degradation.noise_sigma``, audited in section 16 of the docs;
 * :func:`cls_filter` -- step 4.4's Constrained Least Squares filter,
   ``\\hat{F} = H^{*} G / (|H|^{2} + \\lambda |C|^{2})``, using the 4-neighbour
-  discrete Laplacian constraint operator.
-
-Richardson--Lucy is deliberately *not* here (step 4.5).  It reduces to the same
-recipe -- "build ``H`` with :func:`psf_frequency_response`, filter the tapered
-image, clip the result" -- which is exactly the surface this module exposes.
+  discrete Laplacian constraint operator;
+* :func:`richardson_lucy_filter` -- step 4.5's iterative maximum likelihood
+  deconvolution, ``f^{(k+1)} = f^{(k)} \\odot H^T [g / (H f^{(k)})]``, with
+  exact adjoint back-projection, sub-pixel even-kernel alignment, and
+  non-negativity constraint.
 
 Inherited conventions (do not re-derive, do not change)
 -------------------------------------------------------
@@ -955,6 +955,26 @@ def _floor_value(eps) -> float:
     return value
 
 
+def _validate_iterations(iterations, name: str = "iterations") -> int:
+    """Validate a non-negative integer iteration count."""
+    if isinstance(iterations, bool):
+        raise ValueError(f"{name} must be an integer >= 0, got {iterations!r}")
+    if isinstance(iterations, (str, bytes)):
+        raise ValueError(f"{name} must be an integer >= 0, got {iterations!r}")
+    try:
+        as_float = float(iterations)
+    except (TypeError, ValueError) as exc:
+        raise ValueError(f"{name} must be an integer >= 0, got {iterations!r}") from exc
+    if not np.isfinite(as_float):
+        raise ValueError(f"{name} must be a finite number, got {iterations!r}")
+    as_int = int(as_float)
+    if as_int != as_float:
+        raise ValueError(f"{name} must be an integer >= 0, got {iterations!r}")
+    if as_int < 0:
+        raise ValueError(f"{name} must be >= 0, got {as_int}")
+    return as_int
+
+
 def near_zero_mask(denominator, eps: float = DEFAULT_EPS) -> np.ndarray:
     """Boolean mask of the entries :func:`safe_divide` had to clamp.
 
@@ -1699,6 +1719,178 @@ def cls_filter(image, psf, regularization: float, *,
                          out=np.zeros_like(spectrum), where=denominator > 0)
     restored = np.real(np.fft.ifft2(estimate))
     return clip_unit_interval(restored, name="restored image")
+
+
+# --------------------------------------------------------------------------- #
+# Richardson–Lucy deconvolution (step 4.5)
+# --------------------------------------------------------------------------- #
+def richardson_lucy_filter(image, psf, iterations: int = 30, *,
+                           initial_estimate: np.ndarray | None = None,
+                           eps: float = DEFAULT_EPS,
+                           clip_intermediate: bool = False,
+                           width: int | None = None,
+                           fraction: float = DEFAULT_TAPER_FRACTION,
+                           profile: str = DEFAULT_INVERSE_TAPER,
+                           centre: str = DEFAULT_CENTRE_MODE,
+                           require_odd: bool = False,
+                           tol: float = PSF_SUM_TOL) -> np.ndarray:
+    """Restore a degraded image using Richardson--Lucy iterative deconvolution.
+
+    Richardson--Lucy (RL) deconvolution finds the non-negative maximum
+    likelihood estimate of the sharp image :math:`f` under a Poisson observation
+    model :math:`g \\sim \\operatorname{Poisson}(h * f)`.  Starting from an initial
+    non-negative estimate :math:`f^{(0)}`, the estimate is iteratively updated
+    via the fixed-point multiplicative scheme:
+
+    .. math:: f^{(k+1)} = f^{(k)} \\odot H^T \\left[
+              \\frac{g}{\\max(H f^{(k)}, \\varepsilon)} \\right]
+
+    where:
+    * :math:`g` is the observed (optionally edge-tapered) image;
+    * :math:`H` is the forward circular convolution operator with the blur PSF,
+      computed via :func:`psf_frequency_response`:
+      :math:`H x = \\operatorname{Re}(\\mathcal{F}^{-1}\\{H(u,v) \\cdot \\mathcal{F}\\{x\\}\\})`;
+    * :math:`H^T` is the adjoint operator, computed via correlation with the
+      PSF (complex conjugate frequency transfer function):
+      :math:`H^T y = \\operatorname{Re}(\\mathcal{F}^{-1}\\{H^*(u,v) \\cdot \\mathcal{F}\\{y\\}\\})`;
+    * :math:`\\odot` denotes element-wise multiplication;
+    * :math:`\\varepsilon > 0` is a small positive threshold guarding against
+      division by zero and non-physical negative FFT round-off;
+    * :math:`k = 0, 1, \\dots, \\text{iterations}-1`.
+
+    **Forward and Adjoint Consistency.**  For normalized PSFs (:math:`\\sum h = 1`)
+    under circular boundary conditions, the sensitivity map :math:`H^T \\mathbf{1}`
+    is identically :math:`\\mathbf{1}`.  The inner-product identity
+    :math:`\\langle Hx, y \\rangle = \\langle x, H^T y \\rangle` holds to machine
+    precision across all resolutions and PSF symmetries.
+
+    **Convergence and Noise Amplification (Semi-Convergence).**  Unlike linear
+    filters (inverse, Wiener, CLS), RL does not have a single regularisation
+    parameter.  Instead, the iteration count acts as an *implicit* regularisation
+    parameter.  On noise-free images, higher iteration counts monotonically reduce
+    residual error.  On noisy images (especially additive Gaussian noise), RL
+    exhibits semi-convergence: early iterations recover glyph strokes, while
+    excessive iterations fit the high-frequency noise, creating mottled noise
+    artefacts.
+
+    **Non-Negativity and Physical Bounds.**  RL inherently enforces
+    non-negativity (:math:`f \\ge 0`).  Intermediate clipping (:math:`[0, 1]`) is
+    available via ``clip_intermediate=True`` to constrain overshoot on bright
+    plate backgrounds.  Final output is strictly clipped to ``[0, 1]`` via
+    :func:`clip_unit_interval`.
+
+    Parameters
+    ----------
+    image:
+        Degraded 2-D image, validated by :func:`validate_image`.
+    psf:
+        Blur kernel, consumed as-is without renormalisation, validated by
+        :func:`validate_psf`.
+    iterations:
+        Number of multiplicative update iterations (default: 30).  Must be an
+        integer :math:`\\ge 0`.  A value of 0 returns the initial estimate.
+    initial_estimate:
+        Optional non-negative initial estimate matching ``image.shape``.
+        Defaults to the input observation (with lower bound ``eps`` to avoid
+        zero-valued pixels becoming permanently trapped at zero).
+    eps:
+        Lower floor on the predicted observation to avoid division by zero
+        (default: :data:`DEFAULT_EPS` = ``1e-12``).  Must be a finite scalar
+        :math:`> 0`.
+    clip_intermediate:
+        If ``True``, clips the estimate to ``[0, 1]`` after every iteration.
+        If ``False`` (default), only enforces non-negativity (:math:`\\ge 0`)
+        during iterations and clips to ``[0, 1]`` once at the end.
+    width, fraction, profile:
+        Forwarded to :func:`taper_edges`.  Default profile is
+        :data:`DEFAULT_INVERSE_TAPER` (``"none"``) because plate images carry
+        an 8 px margin, making circular convolution exact.
+    centre:
+        ``"auto"`` (default) or ``"pixel"``, forwarded to
+        :func:`psf_frequency_response`.  ``"auto"`` corrects sub-pixel shifts
+        for even-sized kernels.
+    require_odd:
+        Enforce odd-sized PSF convention.  Defaults to ``False`` to accept
+        stored even-sided factor-2 kernels.
+    tol:
+        Tolerance on ``sum(psf) == 1``.
+
+    Returns
+    -------
+    np.ndarray
+        Restored ``float32`` image of the same shape as ``image``, with all
+        values finite and clipped to ``[0, 1]``.
+
+    Raises
+    ------
+    ValueError
+        If ``iterations`` is negative, non-integer, or non-finite; if ``eps``
+        is non-positive or non-finite; if ``initial_estimate`` is invalid; if
+        ``image`` is invalid; if ``psf`` fails validation; or if taper/centre
+        parameters are invalid.
+
+    Examples
+    --------
+    >>> import numpy as np
+    >>> image = np.full((16, 16), 0.5, dtype=np.float32)
+    >>> delta = np.array([[1.0]], dtype=np.float32)
+    >>> np.allclose(richardson_lucy_filter(image, delta, iterations=5), image, atol=1e-6)
+    True
+    >>> np.allclose(richardson_lucy_filter(image, delta, iterations=0), image, atol=1e-6)
+    True
+    """
+    degraded = validate_image(image, name="image")
+    num_iters = _validate_iterations(iterations, name="iterations")
+    eps_val = _finite_scalar(eps, "eps", minimum=1e-15)
+    if not isinstance(clip_intermediate, bool):
+        raise ValueError(f"clip_intermediate must be a bool, got {clip_intermediate!r}")
+
+    response = psf_frequency_response(psf, degraded.shape, tol=tol,
+                                      require_odd=require_odd, centre=centre)
+    adj_response = np.conj(response)
+    windowed = taper_edges(degraded, width=width, fraction=fraction,
+                           profile=profile)
+
+    if initial_estimate is None:
+        estimate = np.maximum(windowed.astype(np.float64), eps_val)
+    else:
+        init = _as_float_array(initial_estimate, "initial_estimate")
+        if init.shape != degraded.shape:
+            raise ValueError(
+                f"initial_estimate shape {init.shape} does not match image shape {degraded.shape}"
+            )
+        non_finite = _count_non_finite(init)
+        if non_finite:
+            raise ValueError(
+                f"initial_estimate has {non_finite} non-finite value(s) (NaN or inf)"
+            )
+        if float(init.min()) < 0.0:
+            raise ValueError(
+                f"initial_estimate must be non-negative, got min {float(init.min()):.6g}"
+            )
+        estimate = np.maximum(init.astype(np.float64), eps_val)
+
+    obs = windowed.astype(np.float64)
+    for _ in range(num_iters):
+        # 1. Forward model: predict blurred observation H f
+        prediction = np.real(np.fft.ifft2(response * np.fft.fft2(estimate)))
+        pred_safe = np.maximum(prediction, eps_val)
+
+        # 2. Ratio of observed to predicted
+        ratio = obs / pred_safe
+
+        # 3. Adjoint back-projection: H^T ratio
+        correction = np.real(np.fft.ifft2(adj_response * np.fft.fft2(ratio)))
+        corr_safe = np.maximum(correction, 0.0)
+
+        # 4. Multiplicative update
+        estimate = estimate * corr_safe
+        if clip_intermediate:
+            estimate = np.clip(estimate, 0.0, 1.0)
+        else:
+            estimate = np.maximum(estimate, 0.0)
+
+    return clip_unit_interval(estimate, name="restored image")
 
 
 # --------------------------------------------------------------------------- #

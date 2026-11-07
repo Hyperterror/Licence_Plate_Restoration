@@ -1,4 +1,4 @@
-# Step 4 — Restoration: the foundation (4.1), inverse filtering (4.2), Wiener filtering (4.3), CLS (4.4)
+# Step 4 — Restoration: foundation (4.1), inverse (4.2), Wiener (4.3), CLS (4.4), Richardson–Lucy (4.5)
 
 **Owner:** Ashish (2026909001) — steps 4 and 8
 **Module:** `license_plate_restoration/restoration.py`
@@ -6,7 +6,8 @@
 `tests/test_restoration_audit.py` (phase 4.1.1 audit, 58),
 `tests/test_inverse_filter.py` (phase 4.2, 39),
 `tests/test_wiener_filter.py` (phase 4.3, 72),
-`tests/test_cls_filter.py` (phase 4.4, 42)
+`tests/test_cls_filter.py` (phase 4.4, 42),
+`tests/test_richardson_lucy.py` (phase 4.5, 59)
 **Phase 4.1.1:** complex-valued arithmetic (§6.1), even-sided kernels (§3.4,
 §8.2), edge-tapering measurements (§4, §5.4). The audit log in §11 records what
 changed and what did not.
@@ -18,8 +19,9 @@ measured three-way comparison against the degraded image and the inverse
 filter on two kernels and three noise levels (§14.3) and the log in §15.
 **Phase 4.3.1:** audit of the BSNR → $K$ conversion: mathematical derivation and candidate evaluation (`docs/wiener_mathematical_audit.md`).
 **Phase 4.3.2:** finalisation of Wiener mathematical documentation and regression tests (§16): exact observed-power heuristic documentation, clipping analysis, candidate comparison summary, and BSNR regression tests. §14.2–§14.4 and §14.7 were updated accordingly.
-**Phase 4.4:** `cls_filter` — Constrained Least Squares (CLS) restoration (§17) with the 4-neighbour discrete Laplacian constraint response $C(u, v)$, smoothness-regularised frequency-domain filtering, zero-gain null handling, and controlled comparison against Wiener across 7×7 and 51×51 blurs (§17.8), logged in §18.
-**Not implemented here:** Richardson–Lucy. It is step 4.5 and sits on exactly the same four helpers (§7).
+**Phase 4.4:** `cls_filter` — Constrained Least Squares (CLS) restoration (§17) with the 4-neighbour discrete Laplacian constraint response $C(u, v)$, smoothness-regularised frequency-domain filtering, zero-gain null handling, and controlled comparison against Wiener across 7×7 and 51×51 blurs (§17.8), logged in §18. Audited in `docs/cls_mathematical_audit.md`.
+**Phase 4.5:** `richardson_lucy_filter` — Richardson–Lucy iterative maximum likelihood deconvolution (§19), with exact adjoint back-projection duality, sub-pixel centring for even kernels, flux conservation, Poisson vs Gaussian noise-model analysis, and iteration trajectory study, logged in §20. Audited in `docs/richardson_lucy_audit.md`.
+**All four restoration algorithms are now fully implemented and integrated** in `license_plate_restoration/restoration.py`.
 
 This document is written so it can be presented directly in the viva: every
 equation that the code evaluates is stated, and every claim about the dataset
@@ -573,7 +575,7 @@ The algorithms differ only in the filter applied to $G = \mathcal{F}\{g_t\}$:
 | **Inverse** (§12, implemented) | $\hat F = \dfrac{G}{H}$ | $H$ with no phase offset; an $\varepsilon$ floor, because $H$ has true zeros |
 | **Wiener** (§14, implemented) | $\hat F = \dfrac{H^{*}}{|H|^{2} + K}\,G$ | $H$ and $H^{*}$ from the same grid; $K$ = noise over **sharp**-signal power in the flat-spectrum model, or the observed-power heuristic $\rho/(1+\rho)$ from the BSNR (§14.4, §16) |
 | **CLS** (§17, implemented) | $\hat F = \dfrac{H^{*}}{|H|^{2} + \lambda\,|C|^{2}}\,G$ | same $H$; $C$ is the DFT of the 4-neighbour Laplacian; $\lambda \ge 0$ trades smoothness against residual power |
-| **Richardson–Lucy** (step 4.5) | $f^{t+1} = f^{t}\left(h^{*} * \dfrac{g}{h * f^{t}}\right)$ | $h$ centred (a PSF that shifts would drag the estimate); `safe_divide`; `clip_unit_interval` for the non-negativity constraint |
+| **Richardson–Lucy** (§19, implemented) | $f^{(k+1)} = f^{(k)} \odot H^T \left[ \dfrac{g}{\max(H f^{(k)}, \varepsilon)} \right]$ | same $H$; adjoint $H^T$ via $H^*$; non-negativity constraint; semi-convergence controlled by iteration count |
 
 then
 
@@ -675,12 +677,13 @@ as-is". Therefore:
 `python -m pytest tests/test_inverse_filter.py -q` → **39 passed**.
 `python -m pytest tests/test_wiener_filter.py -q` → **72 passed**.
 `python -m pytest tests/test_cls_filter.py -q` → **42 passed**.
-`python -m pytest -q` (whole suite) → **376 passed, 6 skipped** (the 6 skips are
+`python -m pytest tests/test_richardson_lucy.py -q` → **59 passed**.
+`python -m pytest -q` (whole suite) → **435 passed, 6 skipped** (the 6 skips are
 the CCPD tests that need the external `CCPD2019/` folder). Before the phase
 4.1.1 audit the suite gave 165 passed / 6 skipped, before phase 4.2 it gave
 218 / 6, before phase 4.3 it gave 262 / 6, before the phase 4.3.1 audit
-it gave 315 / 6, after phase 4.3.2 it gave 334 / 6, and after phase 4.4 it gives
-376 / 6; **no existing test was removed,
+it gave 315 / 6, after phase 4.3.2 it gave 334 / 6, after phase 4.4 it gave
+376 / 6, and after phase 4.5 it gives 435 / 6; **no existing test was removed,
 relaxed or skipped** to make room for the new ones. The two new helper tests in
 the audit file exist because phase 4.2 used an infinite floor and an
 already-accepted infinite `eps` turned the quotient into `inf * phase` — the
@@ -783,6 +786,34 @@ And phase 4.4's claims, all in `tests/test_cls_filter.py`:
 | CLS outperforms inverse filter on noisy plates | `test_cls_beats_inverse_filter_on_noisy_plate` |
 | supports all edge-taper profiles (`none`, `tukey`, `hann`, `linear`) | `test_cls_accepts_all_edge_taper_profiles` |
 | property test: restored image is always finite `float32` in $[0, 1]$ | `test_property_cls_output_is_always_valid_float32` |
+
+And phase 4.5's claims, all in `tests/test_richardson_lucy.py`:
+
+| Claim | Test |
+|---|---|
+| parameter validation rejects negative, non-integer, non-finite, and string iterations | `test_rl_rejects_invalid_iterations` |
+| parameter validation rejects non-positive, non-finite, and string `eps` floors | `test_rl_rejects_invalid_eps` |
+| parameter validation rejects non-boolean `clip_intermediate` | `test_rl_rejects_invalid_clip_intermediate` |
+| input validation rejects malformed images and PSFs | `test_rl_rejects_invalid_image`, `test_rl_rejects_invalid_psf` |
+| zero-sum PSFs are rejected | `test_rl_rejects_zero_sum_psf` |
+| initial estimate validation rejects mismatched shapes, non-finite, or negative values | `test_rl_rejects_invalid_initial_estimate` |
+| inputs are immutable (caller arrays are never modified in-place) | `test_rl_does_not_mutate_inputs` |
+| output keeps grayscale float32 convention, range $[0, 1]$, and is deterministic | `test_rl_output_properties`, `test_rl_is_deterministic` |
+| `iterations=0` returns the initial estimate clipped to $[0, 1]$ | `test_rl_iterations_zero_returns_initial_estimate` |
+| delta PSF leaves clean image unchanged | `test_delta_psf_leaves_image_unchanged` |
+| constant images are exact fixed points for any blur PSF | `test_constant_image_is_exact_fixed_point` |
+| forward/adjoint duality $\langle Hx, y \rangle = \langle x, H^T y \rangle$ holds to machine precision ($< 10^{-14}$) | `test_forward_adjoint_inner_product_identity` |
+| total flux $\sum f^{(k)} = \sum g$ is conserved at each unclipped iteration | `test_flux_conservation_unclipped` |
+| zero-valued pixels and black regions stay finite without division by zero | `test_zero_and_near_zero_regions_stay_finite` |
+| all four project resolutions execute cleanly ($96\times336$, $92\times256$, $48\times168$, $46\times128$) | `test_all_four_project_resolutions_work` |
+| even-sized stored kernels restore without half-pixel shift using `centre="auto"` ($< 0.05$ px vs $> 0.45$ px for `pixel`) | `test_even_sized_psf_restores_without_half_pixel_shift` |
+| asymmetric kernels preserve conjugate phase via $H^*$ in back-projection | `test_asymmetric_kernel_preserves_conjugate_phase` |
+| on clean blur, RL error monotonically decreases over iterations | `test_rl_deblurs_noise_free_plate` |
+| on 20 dB noise, RL demonstrates semi-convergence (early iterations improve, late iterations amplify noise) | `test_rl_noise_amplification_semi_convergence` |
+| `clip_intermediate=True` controls overshoot on bright plate backgrounds | `test_rl_clip_intermediate_controls_overshoot` |
+| custom non-negative initial estimates are respected | `test_rl_custom_initial_estimate` |
+| supports all edge-taper profiles (`none`, `tukey`, `hann`, `linear`) | `test_rl_accepts_all_edge_taper_profiles` |
+| property test: restored image is always finite `float32` in $[0, 1]$ | `test_property_rl_output_is_always_valid_float32` |
 
 `python -m license_plate_restoration.restoration` prints the demo numbers
 quoted in §3.3, §3.4, §5.4, §6.1, §12.3, §12.5 and §14.3 on a real rendered
@@ -2248,3 +2279,208 @@ While CLS significantly outperforms Wiener filtering in visual sharpness and qua
    Added property-based tests in `tests/test_cls_filter.py` verifying that `cls_filter` always returns valid `float32` arrays bounded within $[0, 1]$ across arbitrary image sizes and non-negative regularisation values.
 7. **Regression and test suite status**:
    Added 42 unit tests in `tests/test_cls_filter.py`. Full test suite: **376 passed, 6 skipped** (zero regressions across foundation, audit, inverse filter, Wiener filter, degradation, or renderer tests).
+
+---
+
+## 19. Richardson–Lucy deconvolution (step 4.5)
+
+Richardson–Lucy (RL) deconvolution — independently derived by William Richardson (1972) and Leon Lucy (1974) — is the classical iterative, non-linear restoration algorithm based on maximum likelihood estimation under a Poisson observation model.
+
+Unlike the linear frequency-domain filters implemented in earlier phases (inverse, Wiener, and CLS), which restore images in a single direct FFT step, Richardson–Lucy solves the deconvolution problem through iterative expectation-maximization updates that inherently enforce a **physical non-negativity constraint** ($f(x, y) \ge 0$).
+
+### 19.1 Problem formulation and Poisson likelihood
+
+Let $f \in \mathbb{R}^{M \times N}$ be the true sharp image (representing latent photon emission intensities), $h$ the blur PSF, and $g$ the observed degraded image:
+
+$$g = h * f + n$$
+
+In optical imaging systems (cameras, microscopes, telescopes), photon arrivals at detector pixel $i$ follow a **Poisson distribution** with rate parameter given by the forward blurred intensity $(Hf)_i$:
+
+$$g_i \sim \operatorname{Poisson}((Hf)_i)$$
+
+The likelihood of observing image $g$ given latent image $f$ is:
+
+$$p(g \mid f) = \prod_{i=1}^{MN} \frac{((Hf)_i)^{g_i} e^{-(Hf)_i}}{g_i!}$$
+
+Taking the natural logarithm yields the log-likelihood objective:
+
+$$\ln p(g \mid f) = \sum_{i=1}^{MN} \Big[ g_i \ln\big((Hf)_i\big) - (Hf)_i - \ln(g_i!) \Big]$$
+
+### 19.2 Mathematical derivation of the multiplicative update
+
+To find the maximum likelihood estimate, compute the partial derivative of the log-likelihood with respect to each pixel $f_j$:
+
+$$\frac{\partial \ln p(g \mid f)}{\partial f_j} = \sum_{i=1}^{MN} \left[ \frac{g_i}{(Hf)_i} \frac{\partial (Hf)_i}{\partial f_j} - \frac{\partial (Hf)_i}{\partial f_j} \right]$$
+
+Since $(Hf)_i = \sum_k H_{i, k} f_k$, the derivative is $\frac{\partial (Hf)_i}{\partial f_j} = H_{i, j}$. Substituting:
+
+$$\frac{\partial \ln p(g \mid f)}{\partial f_j} = \sum_{i=1}^{MN} H_{i, j} \frac{g_i}{(Hf)_i} - \sum_{i=1}^{MN} H_{i, j}$$
+
+Define the detector sensitivity at pixel $j$ as $s_j \triangleq \sum_i H_{i, j} = (H^T \mathbf{1})_j$. At a critical point, the gradient must vanish:
+
+$$\sum_{i=1}^{MN} H_{i, j} \frac{g_i}{(Hf)_i} = s_j$$
+
+Multiplying both sides by $f_j$ and dividing by $s_j$ yields the fixed-point iterative update equation:
+
+$$f_j^{(k+1)} = \frac{f_j^{(k)}}{s_j} \sum_{i=1}^{MN} H_{i, j} \frac{g_i}{(Hf^{(k)})_i}$$
+
+In vector-matrix notation:
+
+$$f^{(k+1)} = \frac{f^{(k)}}{H^T \mathbf{1}} \odot H^T \left[ \frac{g}{H f^{(k)}} \right]$$
+
+where $\odot$ denotes element-wise multiplication.
+
+### 19.3 Forward operator $H$ and exact adjoint $H^T$
+
+Under circular boundary conditions, 2-D spatial convolution with blur kernel $h$ corresponds to point-wise multiplication in the discrete Fourier domain by the transfer function $H(u, v)$ computed via `psf_frequency_response`:
+
+$$\mathcal{F}\{H x\} = H(u, v) \cdot \mathcal{F}\{x\} \implies H x = \operatorname{Re}\Big(\mathcal{F}^{-1}\{H(u, v) \cdot \mathcal{F}\{x\}\}\Big)$$
+
+In real inner-product space $\mathbb{R}^{M \times N}$, the adjoint operator $H^T$ is defined by the duality identity:
+
+$$\langle Hx, y \rangle = \langle x, H^T y \rangle \qquad \forall x, y$$
+
+By Parseval's theorem:
+
+$$\sum_{m, n} (Hx)_{m, n} y_{m, n} = \frac{1}{MN} \sum_{u, v} \big(H(u, v) X(u, v)\big) Y^*(u, v) = \frac{1}{MN} \sum_{u, v} X(u, v) \big(H^*(u, v) Y(u, v)\big)^*$$
+
+Therefore, the adjoint operator in the Fourier domain is multiplication by the **complex conjugate transfer function** $H^*(u, v)$:
+
+$$\mathcal{F}\{H^T y\} = H^*(u, v) \cdot \mathcal{F}\{y\} \implies H^T y = \operatorname{Re}\Big(\mathcal{F}^{-1}\{H^*(u, v) \cdot \mathcal{F}\{y\}\}\Big)$$
+
+In the spatial domain, for real $h$, multiplying by $H^*$ corresponds to convolution with the spatially reflected kernel $h^T(x, y) = h(-x, -y)$ (i.e. cross-correlation).
+
+#### Sensitivity Normalisation:
+Because the PSF sums to $1$ ($\sum h = 1.0$) and boundaries are circular, $H(0, 0) = 1.0$. The adjoint response on an array of ones is:
+$$H^T \mathbf{1} = \operatorname{Re}\Big(\mathcal{F}^{-1}\{H^*(u, v) \cdot \mathcal{F}\{\mathbf{1}\}\}\Big) = \mathbf{1}$$
+Therefore, the sensitivity factor $s_j = 1.0$ everywhere on the grid, and the update simplifies to:
+$$f^{(k+1)} = f^{(k)} \odot H^T \left[ \frac{g}{H f^{(k)}} \right]$$
+
+### 19.4 Initialization and numerical safeguards
+
+1. **Initial Estimate $f^{(0)}$**:
+   The default initialisation is $f^{(0)} = \max(g, \varepsilon)$ (the observed degraded image, with lower floor $\varepsilon$). In our experiments, initializing from the observation converges significantly faster than initializing with a flat mean image. An explicit custom initial estimate can also be supplied via `initial_estimate=`.
+2. **Division by Zero Protection**:
+   In the ratio $g / Hf^{(k)}$, if predicted observation $(Hf^{(k)})_i$ approaches zero, division would diverge. A lower floor $\varepsilon = 10^{-12}$ (`eps`) is applied:
+   $$p_{\text{safe}}^{(k)} = \max(H f^{(k)}, \varepsilon)$$
+3. **FFT Round-Off Protection**:
+   Due to floating-point precision, spatial IFFT operations can produce tiny negative numbers (e.g. $-10^{-16}$). Clamping the correction factor $\text{corr}_{\text{safe}} = \max(H^T [g / p_{\text{safe}}], 0.0)$ guarantees that the multiplicative multiplier is strictly non-negative.
+4. **Flux Conservation**:
+   For any normalized PSF where $\sum h = 1.0$, the total image flux is mathematically conserved at every iteration:
+   $$\sum_{j} f_j^{(k+1)} = \sum_{j} f_j^{(k)} \left( H^T \left[ \frac{g}{Hf^{(k)}} \right] \right)_j = \left\langle f^{(k)}, H^T \left[ \frac{g}{Hf^{(k)}} \right] \right\rangle = \left\langle Hf^{(k)}, \frac{g}{Hf^{(k)}} \right\rangle = \sum_{i} g_i$$
+   Numerical tests confirm this holds to float32 precision ($7.52 \times 10^{-9}$ relative error).
+5. **Physical Range Clipping**:
+   The final returned image is strictly clipped to $[0, 1]$ via `clip_unit_interval()`. Optional intermediate clipping (`clip_intermediate=True`) constrains overshoots on bright backgrounds during iterations.
+
+### 19.5 Semi-convergence and noise-model mismatch
+
+A defining characteristic of Richardson–Lucy is **semi-convergence** when applied to noisy data:
+* **Early iterations ($k \le 15\text{--}30$)**: The algorithm rapidly recovers lost high-frequency edge information and sharpens character strokes.
+* **Late iterations ($k > 50$)**: Because RL has no explicit regularisation penalty on spatial roughness (unlike CLS's $\lambda |C|^2$ or Wiener's $K$), it attempts to fit every noisy fluctuation in $g$. High-frequency noise begins to amplify exponentially, forming speckled "checkerboard" artefacts.
+
+#### Noise-Model Mismatch:
+Richardson–Lucy assumes Poisson photon-counting noise. Our project's synthetic degradation pipeline generates additive Gaussian noise with saturation compensation.
+* On **Poisson noise**, noise variance is proportional to signal intensity ($\sigma_i^2 = \mu_i$), perfectly matching RL's logarithmic gradient.
+* On **additive Gaussian noise**, noise variance is constant across all pixels ($\sigma_n^2 = \text{const}$). RL treats dark background ink with the same relative noise scaling as bright foreground pixels, causing dark stroke regions to develop grain if iterated too far.
+
+### 19.6 Even-sized PSFs and sub-pixel centring
+
+Factor-2 decimated images in the benchmark grid frequently use even-sized blur kernels (e.g. $18 \times 18$). By default, `centre="auto"` applies a phase ramp $R(u, v) = e^{2\pi i (\delta_y u / M + \delta_x v / N)}$ to compensate for the half-pixel offset of the kernel mass.
+* In RL, forward projection uses $H(u, v)$ and back-projection uses $H^*(u, v)$.
+* Centroid drift measurements:
+  * With `centre="auto"`: centroid drift is **$< 0.0001$ px**.
+  * With `centre="pixel"`: centroid drift is **$+0.5011$ px** vertically and **$+0.5040$ px** horizontally.
+
+### 19.7 Controlled experimental evaluation
+
+#### 1. Iteration Study Across Blur Kernels and Noise Levels (`seed=7`):
+
+| Kernel | Noise Level | Degraded Input | Iteration 1 | Iteration 5 | Iteration 15 | Iteration 30 | Iteration 50 | Iteration 100 | Best Iteration ($\text{Iter}^*$) |
+|---|---|---|---|---|---|---|---|---|---|
+| **7×7** | **Clean** | 1.106e-01 (19.1 dB) | 9.500e-02 | 7.061e-02 | 4.986e-02 | 3.876e-02 | 3.340e-02 | **2.981e-02** (30.5 dB) | **100** (2.981e-02) |
+| **7×7** | **30 dB** | 1.110e-01 (19.1 dB) | 9.538e-02 | 7.162e-02 | 5.292e-02 | 4.557e-02 | **4.551e-02** (26.8 dB) | 5.253e-02 | **50** (4.551e-02) |
+| **7×7** | **20 dB** | 1.148e-01 (18.8 dB) | 9.943e-02 | 7.894e-02 | **7.026e-02** (23.1 dB) | 7.702e-02 | 9.095e-02 | 1.201e-01 | **15** (7.026e-02) |
+| **51×51** | **Clean** | 3.164e-01 (10.0 dB) | 3.111e-01 | 2.982e-01 | 2.797e-01 | 2.629e-01 | 2.494e-01 | **2.313e-01** (12.7 dB) | **100** (2.313e-01) |
+| **51×51** | **30 dB** | 3.164e-01 (10.0 dB) | 3.111e-01 | 2.982e-01 | 2.796e-01 | 2.629e-01 | 2.493e-01 | **2.312e-01** (12.7 dB) | **100** (2.312e-01) |
+| **51×51** | **20 dB** | 3.169e-01 (10.0 dB) | 3.114e-01 | 2.985e-01 | 2.799e-01 | 2.632e-01 | 2.497e-01 | **2.319e-01** (12.7 dB) | **100** (2.319e-01) |
+
+*Key Findings:*
+1. **Semi-convergence illustrated:** On the 7×7 kernel at 20 dB BSNR, RMSE drops from $0.1148$ to a minimum of $0.07026$ at 15 iterations, then climbs to $0.1201$ at 100 iterations as noise is amplified.
+2. **Slow convergence on large blurs:** On the 51×51 kernel, the first-order multiplicative update converges slowly. 100 iterations reduces RMSE to $0.2312$, whereas CLS resolves the global deconvolution in a single pass ($0.1566$).
+
+#### 2. Multi-Seed 4-Way Method Comparison (10 Random Seeds):
+
+| Kernel | Noise Level | Degraded Input | Inverse Filter | Wiener Filter | CLS Filter | RL (Fixed Deployable) | RL (Oracle Swept) |
+|---|---|---|---|---|---|---|---|
+| **7×7** | **30 dB** | $1.183\times 10^{-1}$ | $6.963\times 10^{-1}$ | $7.678\times 10^{-2}$ | **$4.897\times 10^{-2}$** | $5.273\times 10^{-2}$ (it=30) | $5.139\times 10^{-2}$ |
+| **7×7** | **20 dB** | $1.220\times 10^{-1}$ | $6.990\times 10^{-1}$ | $8.869\times 10^{-2}$ | **$7.161\times 10^{-2}$** | $7.585\times 10^{-2}$ (it=20) | $7.535\times 10^{-2}$ |
+| **51×51** | **30 dB** | $3.118\times 10^{-1}$ | $7.008\times 10^{-1}$ | $1.697\times 10^{-1}$ | **$1.512\times 10^{-1}$** | $2.603\times 10^{-1}$ (it=30) | $2.476\times 10^{-1}$ |
+| **51×51** | **20 dB** | $3.124\times 10^{-1}$ | $7.005\times 10^{-1}$ | $2.299\times 10^{-1}$ | **$1.727\times 10^{-1}$** | $2.706\times 10^{-1}$ (it=20) | $2.483\times 10^{-1}$ |
+
+#### 3. Poisson Noise Model Study:
+Evaluating on native Poisson photon-counting noise across three photon flux levels:
+
+| Photon Count $N$ | Degraded Input | Wiener Filter | CLS Filter | Richardson–Lucy | Winner |
+|---|---|---|---|---|---|
+| **1,000 photons** | $1.128\times 10^{-1}$ | $7.196\times 10^{-2}$ | $6.618\times 10^{-2}$ | **$5.175\times 10^{-2}$** | **RL (by +2.1 dB)** |
+| **5,000 photons** | $1.111\times 10^{-1}$ | $5.678\times 10^{-2}$ | $5.014\times 10^{-2}$ | **$3.858\times 10^{-2}$** | **RL (by +2.3 dB)** |
+| **20,000 photons** | $1.108\times 10^{-1}$ | $4.484\times 10^{-2}$ | $3.906\times 10^{-2}$ | **$3.483\times 10^{-2}$** | **RL (by +1.0 dB)** |
+
+Under its native Poisson model, Richardson–Lucy **decisively outperforms both Wiener and CLS filtering**, proving its theoretical maximum-likelihood foundation.
+
+---
+
+### 19.8 Four-way algorithm comparison matrix
+
+| Dimension | Inverse Filter | Wiener Filter | CLS Filter | Richardson–Lucy |
+|---|---|---|---|---|
+| **Type** | Linear, direct | Linear, direct | Linear, direct | Non-linear, iterative |
+| **Optimization Criterion** | $\min \|g - h*f\|^2$ | $\min \mathbb{E}[\|f - \hat{f}\|^2]$ | $\min \|c*f\|^2$ s.t. $\|g - h*f\|^2 = \|n\|^2$ | $\max \ln p(g \mid f)$ (Poisson ML) |
+| **Noise Assumption** | None (noise ignored) | Additive Gaussian (flat prior) | Additive Gaussian (smooth prior) | Poisson photon counting |
+| **Regularisation Parameter** | Denominator floor $\varepsilon$ | Constant scalar $K$ | High-pass penalty $\lambda |C|^2$ | Iteration count $k$ |
+| **DC Gain at $(0, 0)$** | $1.0$ | $1 / (1 + K) < 1.0$ | $1.0$ identically | $1.0$ (flux conserving) |
+| **Non-Negativity ($f \ge 0$)** | Post-hoc clip only | Post-hoc clip only | Post-hoc clip only | **Inherent in formulation** |
+| **Computational Complexity** | 2 FFTs (1 pass, $\sim 2$ ms) | 2 FFTs (1 pass, $\sim 2$ ms) | 2 FFTs (1 pass, $\sim 2$ ms) | 4 FFTs per iteration ($\sim 80$ ms for 30 iters) |
+| **Best Used For** | Noise-free images | Moderate Gaussian noise | Structured plates with Gaussian noise | Low-light photon noise / localized blurs |
+
+---
+
+### 19.9 DIP Viva Preparation: Core Questions & Answers
+
+**Q: What is the fundamental difference between Richardson–Lucy and the other three methods?**
+*Answer:* Inverse, Wiener, and CLS are direct, linear frequency-domain filters derived under $L_2$ Euclidean norm minimization. They assume unconstrained pixel values ($-\infty, +\infty$) and enforce $[0, 1]$ range only post-hoc. Richardson–Lucy is an iterative, non-linear maximum likelihood method derived under a Poisson statistics model that inherently enforces a strict non-negativity constraint ($f \ge 0$).
+
+**Q: Why is the Richardson–Lucy update multiplicative rather than additive?**
+*Answer:* Because it is derived from the Poisson log-likelihood gradient $\frac{\partial \ln p}{\partial f_j} = \sum_i H_{i, j} \frac{g_i}{(Hf)_i} - 1$. Setting this to zero and solving as a fixed-point equation yields $f_j^{(k+1)} = f_j^{(k)} \cdot \left[ H^T (g / Hf) \right]_j$. The multiplicative form guarantees that if $f^{(0)} \ge 0$ and $g \ge 0$, then $f^{(k)} \ge 0$ for all iterations: non-negativity is preserved naturally without projection.
+
+**Q: What does the adjoint operator $H^T$ do, and how is it implemented?**
+*Answer:* The adjoint operator back-projects the observation-to-prediction discrepancy ratio $g / Hf$ back into the image space. In the frequency domain, $H^T$ is implemented by multiplying by the complex conjugate $H^*(u, v)$ followed by an inverse FFT. In spatial terms, this is cross-correlation with the PSF (or convolution with the spatially flipped PSF $h(-x, -y)$).
+
+**Q: What is semi-convergence, and why does it occur in Richardson–Lucy?**
+*Answer:* Semi-convergence is the property where restoration quality improves during early iterations but deteriorates during later iterations. Because unregularised Richardson–Lucy has no roughness penalty, maximum likelihood attempts to fit every pixel fluctuation. On noise-free data, likelihood increases monotonically toward the true scene. On noisy data, early iterations recover large-scale glyph features, while late iterations amplify high-frequency noise spikes to fit the noisy observations.
+
+**Q: Why does CLS outperform Richardson–Lucy on our project's license plate dataset?**
+*Answer:* For two mathematical reasons: (1) Our degradation pipeline adds Gaussian noise, whereas RL is formulated for Poisson noise. (2) License plates have structured glyph edges where CLS's Laplacian smoothness prior ($\lambda |C|^2$) suppresses high-frequency noise while leaving character boundaries sharp. Furthermore, on large blurs (51×51), CLS inverts global frequencies in a single pass, whereas RL's first-order gradient updates converge very slowly.
+
+---
+
+## 20. Phase 4.5 implementation log
+
+* **Date**: November 2026
+* **Commit**: `feat(restoration): implement Richardson-Lucy filtering`
+* **Author**: Ashish (2026909001)
+
+### Decisions made and rationale:
+
+1. **Exact Adjoint Formulation**:
+   Verified mathematically and empirically that $H^T y = \operatorname{Re}(\mathcal{F}^{-1}\{H^*(u, v) \mathcal{F}\{y\}\})$ is the exact adjoint of circular convolution $Hx = \operatorname{Re}(\mathcal{F}^{-1}\{H(u, v) \mathcal{F}\{x\}\})$, satisfying $\langle Hx, y \rangle = \langle x, H^T y \rangle$ to $< 10^{-14}$.
+2. **Sub-Pixel Centring via `centre="auto"`**:
+   Forwarded `centre="auto"` to `psf_frequency_response`, ensuring that even-sized kernels (e.g. $18 \times 18$ from factor-2 decimation) restore without half-pixel centroid displacement ($< 0.0001$ px drift).
+3. **Robust Numerical Safeguards**:
+   Implemented lower floor $\varepsilon = 10^{-12}$ on predicted observation $Hf$ to prevent division by zero, non-negative clamping on back-projected corrections to guard against FFT numerical round-off artifacts, and validated non-negative integer iteration counts.
+4. **Comprehensive Test Suite**:
+   Created `tests/test_richardson_lucy.py` containing 59 unit, regression, and property-based tests covering all contracts, mathematical properties, and image resolutions. Full test suite: **435 passed, 6 skipped** (zero regressions across foundation, audit, inverse, Wiener, or CLS tests).
+5. **Experimental Benchmarking**:
+   Authored `experiments/run_richardson_lucy_experiment.py` and saved full results in `experiments/richardson_lucy_experiment_results.json`. Replicated iteration trajectories, 10-seed comparisons, and Poisson noise experiments.
+6. **Independent Audit Report**:
+   Authored comprehensive audit report in `docs/richardson_lucy_audit.md`.
