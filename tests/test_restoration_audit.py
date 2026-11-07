@@ -189,6 +189,27 @@ def test_near_zero_mask_measures_the_modulus_of_a_complex_spectrum() -> None:
     assert np.angle(floored[3]) == pytest.approx(0.0, abs=1e-12)
 
 
+@pytest.mark.parametrize("eps", [np.inf, np.nan, 0.0, -1e-12])
+def test_helpers_refuse_a_floor_that_cannot_be_used(eps: float) -> None:
+    """``eps=inf`` used to pass ``eps > 0`` and then produce ``inf * phase``.
+
+    An infinite floor turns every denominator into ``inf * e^{i theta}`` and,
+    where a phase component is exactly 0, into a NaN -- so the "repaired"
+    quotient was not finite at all.  The floor is now validated once, in
+    ``_floor_value``, by both helpers.
+    """
+    with pytest.raises(ValueError, match="eps must be"):
+        near_zero_mask(np.ones(3), eps=eps)
+    with pytest.raises(ValueError, match="eps must be"):
+        safe_divide(np.ones(3), np.ones(3), eps=eps)
+
+
+def test_safe_divide_rejects_a_floor_that_is_not_a_number() -> None:
+    """A string floor passed the mask check, then crashed on ``eps * phase``."""
+    with pytest.raises(ValueError, match="eps must be a number"):
+        safe_divide(np.ones(2), np.ones(2), eps="1e-3")
+
+
 @pytest.mark.parametrize("call", [
     lambda: validate_image(np.zeros((3, 3), dtype=np.complex128)),
     lambda: validate_psf(np.full((3, 3), 1.0 / 9.0, dtype=np.complex128)),

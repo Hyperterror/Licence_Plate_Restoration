@@ -1,21 +1,25 @@
-# Step 4.1 — Restoration Foundation
+# Step 4 — Restoration: the foundation (4.1) and inverse filtering (4.2)
 
 **Owner:** Ashish (2026909001) — steps 4 and 8
 **Module:** `license_plate_restoration/restoration.py`
-**Tests:** `tests/test_restoration.py` (foundation),
-`tests/test_restoration_audit.py` (phase 4.1.1 audit)
-**Revised by the phase 4.1.1 audit:** complex-valued arithmetic (§6.1), even-sided
-kernels (§3.4, §8.2), edge-tapering measurements (§4, §5.4). Every number added
-in that revision was measured on this repository; the audit log in §11 records
-what changed and what did not.
-**Scope of this phase:** the machinery every restoration algorithm needs. Inverse
-filtering, Wiener, constrained least squares (CLS) and Richardson–Lucy are
-**not** implemented here; they are step 4.2 and they will all sit on top of the
-four helpers described below.
+**Tests:** `tests/test_restoration.py` (foundation, 66),
+`tests/test_restoration_audit.py` (phase 4.1.1 audit, 58),
+`tests/test_inverse_filter.py` (phase 4.2, 39)
+**Phase 4.1.1:** complex-valued arithmetic (§6.1), even-sided kernels (§3.4,
+§8.2), edge-tapering measurements (§4, §5.4). The audit log in §11 records what
+changed and what did not.
+**Phase 4.2:** `inverse_filter`, the frequency-domain inverse filter (§12), with
+the taper and floor measurements that decided its defaults (§12.3) and the log
+in §13.
+**Not implemented here:** Wiener, constrained least squares (CLS) and
+Richardson–Lucy. They are steps 4.3–4.5 and they sit on exactly the same four
+helpers (§7).
 
 This document is written so it can be presented directly in the viva: every
 equation that the code evaluates is stated, and every claim about the dataset
-was verified against the code in this repository.
+was verified against the code in this repository. Every number marked
+*measured* comes from `python -m license_plate_restoration.restoration` or from
+the test that pins it.
 
 ---
 
@@ -437,8 +441,20 @@ not copies of the function:
   from the leak term, so step 8's metric does not change when step 4.2 picks a
   different arm;
 * switching is one keyword, and the quantity that should decide it — restored
-  PSNR against $f$ — belongs to step 4.2, which does not exist yet and must not
-  be pre-empted by an answer invented here.
+  PSNR against $f$ — belongs to step 4.2.
+
+**What step 4.2 then measured.** §12.3 runs the ablation on a real plate with
+the inverse filter, and the answer is unambiguous: the untapered arm wins
+everywhere, by four orders of magnitude at the tight floor ($3.3\times10^{-5}$
+against $0.70$ RMS for a $7\times7$ kernel, clean input) and by 4× at the loose
+one even for the 51×51 kernel that is *wider* than the margin ($0.188$
+against $0.753$). So `inverse_filter` defaults to `profile="none"`
+(`DEFAULT_INVERSE_TAPER`), while `DEFAULT_TAPER_PROFILE` stays `"tukey"` for the
+rest of the module. The reason the prediction above ("the ramp is insurance for
+kernels wider than the margin") did not survive contact with the metric is
+also in §12.3: at a gain of $1/\varepsilon$ the residual the ramp *creates* is
+larger than the wrap it removes, and both are multiplied by the same
+$1/|H|$.
 
 What these numbers **do** forbid: applying `hann` to a plate, and claiming in
 the viva that the taper "removes a huge seam" on this dataset. The defensible
@@ -526,9 +542,11 @@ coefficient ($+0.407149$ rad, matching $\arg(1+2i) - 0.7$ exactly).
 
 ---
 
-## 7. How step 4.2 will use these helpers
+## 7. The preamble all four algorithms share
 
-All four algorithms share the same preamble:
+All four algorithms share the same preamble, and step 4.2 packaged the first
+row of the table below as `inverse_filter` rather than leaving it to be
+re-typed:
 
 ```python
 g      = validate_image(degraded)                    # float32, [0, 1]
@@ -546,7 +564,7 @@ The algorithms differ only in the filter applied to $G = \mathcal{F}\{g_t\}$:
 
 | Algorithm | Filter | What it needs from the foundation |
 |---|---|---|
-| **Inverse** | $\hat F = \dfrac{G}{H}$ | $H$ with no phase offset; an $\varepsilon$ floor, because $H$ has true zeros |
+| **Inverse** (§12, implemented) | $\hat F = \dfrac{G}{H}$ | $H$ with no phase offset; an $\varepsilon$ floor, because $H$ has true zeros |
 | **Wiener** | $\hat F = \dfrac{H^{*}}{|H|^{2} + K}\,G$ | $H$ and $H^{*}$ from the same grid; $K \approx$ noise-to-signal ratio $1/\text{BSNR}$ |
 | **CLS** | $\hat F = \dfrac{H^{*}}{|H|^{2} + \lambda\,|C|^{2}}\,G$ | same $H$; $C$ is the DFT of the Laplacian, so the same FFT convention |
 | **Richardson–Lucy** | $f^{t+1} = f^{t}\left(h^{*} * \dfrac{g}{h * f^{t}}\right)$ | $h$ centred (a PSF that shifts would drag the estimate); `safe_divide`; `clip_unit_interval` for the non-negativity constraint |
@@ -647,11 +665,16 @@ as-is". Therefore:
 ## 9. Verification
 
 `python -m pytest tests/test_restoration.py -q` → **66 passed**.
-`python -m pytest tests/test_restoration_audit.py -q` → **53 passed**.
-`python -m pytest -q` (whole suite) → **218 passed, 6 skipped** (the 6 skips are
-the CCPD tests that need the external `CCPD2019/` folder). Before this audit the
-same two commands gave 165 passed / 6 skipped; **no existing test was removed,
-relaxed or skipped** to make room for the new ones.
+`python -m pytest tests/test_restoration_audit.py -q` → **58 passed**.
+`python -m pytest tests/test_inverse_filter.py -q` → **39 passed**.
+`python -m pytest -q` (whole suite) → **262 passed, 6 skipped** (the 6 skips are
+the CCPD tests that need the external `CCPD2019/` folder). Before the phase
+4.1.1 audit the suite gave 165 passed / 6 skipped, and before phase 4.2 it gave
+218 / 6; **no existing test was removed, relaxed or skipped** to make room for
+the new ones. The two new helper tests in the audit file exist because phase
+4.2 used an infinite floor and an already-accepted infinite `eps` turned the
+quotient into `inf * phase` — the fix is in `_floor_value`, shared by
+`safe_divide` and `near_zero_mask`, so the two can no longer disagree.
 
 What the tests actually demonstrate, beyond "it runs":
 
@@ -685,10 +708,30 @@ And the audit's own claims, all in `tests/test_restoration_audit.py`:
 | the taper arms are distinct, safe and attributable | `test_none_profile_is_the_identity_window`, `test_hann_profile_has_no_plateau`, `test_linear_profile_keeps_the_plateau_but_jumps_in_slope`, `test_taper_rejects_profile_misuse` |
 | the default ramp never fades a glyph stroke | `test_default_taper_ramp_leaves_the_glyph_strokes_untouched` |
 
+And phase 4.2's claims, all in `tests/test_inverse_filter.py` unless marked
+*audit*:
+
+| Claim | Test |
+|---|---|
+| $H\equiv1$ is an exact identity, not merely close | `test_delta_psf_returns_the_image_unchanged` |
+| a noise-free blur is undone to $4.7\times10^{-6}$ RMS | `test_noise_free_blur_is_inverted_exactly` |
+| an odd `psf_builder` kernel restores a plate to $3.3\times10^{-5}$ | `test_odd_motion_psf_restores_a_plate` |
+| an even kernel lands on the reference ($0.0000$ px); the pixel rule lands $+0.5000$ px off | `test_even_sized_psf_is_restored_without_a_half_pixel_shift` |
+| the stored factor-2 pair stays aligned ($0.003$ px drift against $0.176$) | `test_even_stored_kernel_keeps_the_decimated_plate_aligned` |
+| a complex $H$ is divided by in full ($1.4\times10^{-2}$ against $2.7\times10^{5}$ when only $\operatorname{Re}H$ is used) | `test_complex_frequency_response_is_not_truncated` |
+| a response with 79 exact zeros still returns an image | `test_near_zero_frequency_response_still_returns_an_image` |
+| the floor trades accuracy against noise in both directions | `test_floor_trades_restoration_against_noise_amplification` |
+| an unusable floor is refused by both helpers | `test_helpers_refuse_a_floor_that_cannot_be_used`, `test_safe_divide_rejects_a_floor_that_is_not_a_number` (audit) |
+| the output is always a finite `float32` image in $[0,1]$ | `test_property_output_is_always_a_valid_image`, `test_output_keeps_the_image_convention` |
+| the taper only moves the border | `test_taper_choice_only_changes_the_border` |
+| bad images, kernels and parameters raise | `test_inverse_filter_rejects_invalid_input` |
+
 `python -m license_plate_restoration.restoration` prints the demo numbers
-quoted in §3.3, §3.4, §5.4 and §6.1 on a real rendered plate — the DC gain, the
-$|H|$ minimum, the agreement with `blur_fft`, the parity/offset table, the
-complex-quotient check and the four-window table.
+quoted in §3.3, §3.4, §5.4, §6.1, §12.3 and §12.5 on a real rendered plate —
+the DC gain, the $|H|$ minimum, the agreement with `blur_fft`, the parity/offset
+table, the complex-quotient check, the four-window table, the inverse-filter
+table (kernel × noise × taper × floor), the floor sweep that locates the
+20 dB optimum, and the factor-2 centroid drift.
 
 ---
 
@@ -772,10 +815,59 @@ exactly 1.0.
 Yes, near the border — that is the trade. The interior is untouched
 (exactly 1.0 multiplier), and the interior is what is scored.
 
-**Q: Why can a plain inverse filter not work?**
-$|H|$ has genuine near-zeros (measured $2\times10^{-6}$ here), so $G/H$
-amplifies noise by $1/|H|$ and produces garbage. That is exactly why step 4.2
-adds $K$ (Wiener) or $\lambda|C|^2$ (CLS) to the denominator.
+**Q: What is inverse filtering?**
+$\hat F = G/H$ — one complex division per frequency coefficient, then an
+inverse FFT (§12.1). It is the *closed-form* solution of the noise-free model,
+not an approximation to it: if $g = h*f$ exactly and $H$ has no zeros, the
+restored image is the original image.
+
+**Q: Then why is it not the final answer?**
+Because $|H|$ has genuine near-zeros (measured $2.1\times10^{-6}$ for a 7×7 and
+$1.1\times10^{-9}$ for a 51×51 kernel), and the error it produces is
+$N/|H|$ plus a model-residual term over the same $|H|$. Dividing by a
+near-zero restores noise, not detail. That is why steps 4.3–4.5 add $K$
+(Wiener) or $\lambda|C|^2$ (CLS) to the denominator, or iterate instead of
+dividing (Richardson–Lucy).
+
+**Q: So what stops the division from exploding?**
+The floor $\varepsilon$: wherever $|H|\le\varepsilon$ the denominator is
+replaced by $\varepsilon\,H/|H|$, so no coefficient is divided by less than
+$\varepsilon$ and the gain is capped at $1/\varepsilon$. Measured: $0$, $2779$
+and $19136$ of 32256 coefficients are floored for the 7×7 kernel at
+$\varepsilon = 10^{-12}, 10^{-2}, 10^{-1}$ (§12.3). The floor keeps $\arg H$, so
+the clamped coefficient adds no phase error (§6.1).
+
+**Q: How do you choose $\varepsilon$?**
+It should match the noise-to-signal amplitude ratio of the input, which is why
+the 20 dB rows improve monotonically as the floor rises to $10^{-1}$ and the
+clean rows get worse as it rises past $10^{-12}$ (§12.3). A floor below the
+input's own quantisation level is worse than useless: float32 stores 0.5 to
+$6\times10^{-8}$, and $6\times10^{-8}\times8.9\times10^{8} \gg 1$, which is why
+the *noise-free* 51×51 case needs $\varepsilon\ge10^{-2}$ to beat the blur.
+
+**Q: Which is the honest headline result of this phase?**
+That the inverse filter is a baseline, not a solution. For a small kernel on
+clean input it is spectacular — the 7×7 blur's interior error
+$1.1\times10^{-1}$ falls to $3.3\times10^{-5}$, a factor 3400 — and for a
+kernel whose nulls sit below the input's quantisation it is *worse than doing
+nothing* ($3.2\times10^{-1}$ blurred against $7.0\times10^{-1}$ restored,
+§12.3, §12.6).
+
+**Q: Why does `inverse_filter` default to `profile="none"` when the module
+default is `tukey`?**
+Because it was measured, not assumed. On this dataset the ramp does not remove
+a seam (the 8 px margin already made the wrap continuous) but it does create a
+border model residual, and the inverse filter multiplies that residual by the
+same $1/|H|$ — 0.70 RMS against $3.3\times10^{-5}$ for a 7×7 kernel, and 4×
+worse even for a 51×51 kernel that is wider than the margin (§12.3). The global
+`DEFAULT_TAPER_PROFILE` is untouched.
+
+**Q: Why does the even-kernel half pixel still matter when there is a floor?**
+Because the floor bounds the *magnitude* of the response, not its *phase*, and
+a 0.5 px displacement is a unit-modulus phase ramp. No $\varepsilon$ removes
+it. Measured end-to-end through the filter: `centre="auto"` lands the blob on
+the reference ($0.0000$ px, RMSE $1.1\times10^{-6}$), `centre="pixel"` lands it
+$+0.5000$ px off (RMSE $2.8\times10^{-2}$) — §12.5.
 
 **Q: Is `length` in the motion PSF the smear or half the smear?**
 Half. `length=15` builds a 31×31 kernel, i.e. a 31 px smear; the grid maximum
@@ -807,10 +899,364 @@ it. Each is answered above; this table is the index, and it records what was
   here was measured on the generative pipeline (`plates.npz`, `blur_fft`,
   `effective_psf`) rather than on the stored degraded images. The forward model
   is the same code, but this is a limitation worth stating.
-* The taper's effect on PSNR cannot be settled before step 4.2 exists; §5.4
-  measures the mechanism, not the final metric.
+* The taper's effect on restored accuracy could not be settled by the audit
+  alone; §5.4 measured the mechanism and deferred the decision to a metric.
+  **Step 4.2 settled it** (§12.3): interior RMSE against $f$, over two kernels,
+  two noise levels, three floors and two windows, and the untapered arm wins
+  everywhere. The formal PSNR/SSIM comparison is still step 8's, because this
+  repository has no implementation of either (§12.6).
+* With `eps` now validated in one place (`_floor_value`), a floor given as
+  `np.float32` is compared and multiplied as the same number in `safe_divide`
+  and `near_zero_mask`; before, a string floor passed the mask and then crashed
+  on `eps * phase`.
 * `report_ishit.md` §5 still says the PSFs are odd-sized, which is true of
   `psf_builder` and false of the stored factor-2 kernels (§8.2). That file is
   teammate-owned and was not edited; the discrepancy is reported here instead.
 
-`python -m pytest -q` → **218 passed, 6 skipped**.
+`python -m pytest -q` → **218 passed, 6 skipped** at the end of the audit, and
+**262 passed, 6 skipped** after step 4.2 (§13).
+
+---
+
+## 12. Inverse filtering (step 4.2)
+
+### 12.1 The algorithm
+
+The forward model of §1, evaluated at the image's own resolution, is
+$g = h*f + n$, and by the convolution theorem of §3.1 every DFT coefficient
+satisfies
+
+$$
+G(u,v) \;=\; H(u,v)\,F(u,v) \;+\; N(u,v).
+$$
+
+If there were no noise and $H$ had no zeros, the answer would be exact and
+would be one division per coefficient:
+
+$$
+\hat F(u,v) \;=\; \frac{G(u,v)}{H(u,v)},
+\qquad
+\hat f \;=\; \operatorname{Re}\,\mathcal{F}^{-1}\{\hat F\} .
+$$
+
+That is the whole algorithm. Everything else in `inverse_filter` exists to make
+that division **legal on a real file**: the kernel has to be validated and
+centred, the image has to be given a continuous periodic extension,
+denominators that are numerically zero have to be floored, and the result has
+to come back in the project's image convention.
+
+```python
+inverse_filter(image, psf, eps=DEFAULT_EPS, width=None,
+               fraction=DEFAULT_TAPER_FRACTION, profile=DEFAULT_INVERSE_TAPER,
+               centre=DEFAULT_CENTRE_MODE, require_odd=False, tol=PSF_SUM_TOL)
+```
+
+| Parameter | Meaning | Default |
+|---|---|---|
+| `image` | the degraded plate, 2-D `float32` in $[0,1]$ | required |
+| `psf` | the kernel **as stored**, resolution-matched, summing to 1 | required |
+| `eps` | denominator floor $\varepsilon$: finite and $>0$ | $10^{-12}$ |
+| `width` | taper width in pixels, on every side | `None` → `fraction` |
+| `fraction` | taper width as a fraction of the shorter side | $0.1$ |
+| `profile` | `none`, `tukey`, `hann` or `linear` | `none` |
+| `centre` | `auto` (stored mass on the FFT origin) or `pixel` | `auto` |
+| `require_odd` | refuse an even-sided kernel | `False` |
+| `tol` | unit-sum tolerance for the kernel | $10^{-5}$ |
+
+`eps` is the only parameter that changes the *algorithm*; the others change the
+preprocessing (§12.4) or the geometry (§12.5). Both defaults that could have
+been guessed were **measured** instead: the floor is the textbook
+"guard against a zero" value, and the taper arm is the one that wins §12.3.
+
+### 12.2 Why $1/H$ is ill-conditioned, and what the floor does
+
+Per coefficient the estimate is
+
+$$
+\hat F - F \;=\; \frac{N + E}{H},
+\qquad\text{so}\qquad
+\bigl|\hat F - F\bigr| \;\le\; \frac{|N| + |E|}{|H|},
+$$
+
+where $E$ is everything the model cannot explain: the wrap discontinuity, the
+residual a taper leaves behind, and the fact that the input is stored in
+`float32`. The error at a frequency is the input error there **divided by the
+gain the blur applied**. That is the whole difficulty — $H$ attenuates, the
+division un-attenuates, and it un-attenuates the noise exactly as faithfully as
+the signal. Measured on the two demo kernels, $|H|$ bottoms out at
+$2.1\times10^{-6}$ (7×7) and $1.1\times10^{-9}$ (51×51), i.e. gains of
+$4.8\times10^{5}$ and $8.9\times10^{8}$.
+
+The floor replaces the denominator wherever it is smaller than $\varepsilon$:
+
+$$
+\tilde H(u,v) =
+\begin{cases}
+H(u,v), & |H(u,v)| > \varepsilon,\\[2pt]
+\varepsilon\,\dfrac{H(u,v)}{|H(u,v)|}, & |H(u,v)| \le \varepsilon,
+\end{cases}
+\qquad
+\left|\frac{G}{\tilde H}\right| \;\le\; \frac{|G|}{\varepsilon} .
+$$
+
+Three consequences worth saying out loud in the viva:
+
+* **The gain is capped at $1/\varepsilon$** — 240 dB, 40 dB and 20 dB for
+  $\varepsilon = 10^{-12}, 10^{-2}, 10^{-1}$. A floor of $10^{-1}$ means "no
+  coefficient may be amplified by more than 20 dB", which is *exactly* the BSNR
+  of this phase's noisy experiment — and §12.3's sweep puts that experiment's
+  optimum at $\varepsilon \approx 0.3$, the same order of magnitude. The knob
+  and the channel have a shared unit.
+* **The phase is preserved** ($\arg\tilde H = \arg H$), so a floored
+  coefficient still contributes $\arg G - \arg H$ and no $\pi$ flips appear in
+  the output (§6.1).
+* **The floor is a global dial, not a per-coefficient rule.** It cannot tell
+  where the signal is strong, so it trades the restoration of *every* small
+  coefficient for the suppression of noise at *some* of them. Wiener (§7)
+  replaces the flat $\varepsilon$ by $|H|^2/(|H|^2+K)$ — the same idea, made
+  frequency-selective and applied to the numerator as well.
+
+A floor below the input's own quantisation level is worse than useless, and
+this is the sharpest fact in the phase. A `float32` near 0.5 is stored to
+$6.0\times10^{-8}$, and
+
+$$
+6.0\times10^{-8} \;\times\; 8.9\times10^{8} \;\approx\; 53 ,
+$$
+
+so for the 51×51 kernel the *round-off of a noise-free file* is amplified to
+order 1 by the unfloored division. That is why the noise-free 51×51 row of
+§12.3 needs $\varepsilon \ge 10^{-2}$ to beat the blur at all: the floor is not
+there for the noise you can see, it is there for the noise the file format
+put there.
+
+### 12.3 The measured trade-off
+
+`python -m license_plate_restoration.restoration` prints this table and every
+number in it.
+
+**Setup.** `renderer.generate_plates(1, seed=7)[0][0]` — a $96\times336$ plate
+at factor 1. Two kernels, both from the grid's own builders at 8°:
+$\texttt{combine}(\texttt{motion}(3), \texttt{defocus}(0))$, a $7\times7$
+kernel with $|H|_{\min} = 2.073\times10^{-6}$, and
+$\texttt{combine}(\texttt{motion}(21), \texttt{defocus}(4))$, a $51\times51$
+kernel with $|H|_{\min} = 1.127\times10^{-9}$. The degraded image is
+`blur_fft(plate, kernel)` — the step-2.2 forward model, reflect-padded; the
+noisy one is `add_noise(blurred, 20.0, seed=3)`. The score is the **interior
+RMSE** against the clean plate, 12 px margin, so the border the taper touches
+is excluded from every number. For reference, doing nothing scores
+$1.106\times10^{-1}$ (7×7) and $3.164\times10^{-1}$ (51×51) on clean input.
+
+| kernel | input | `none` $10^{-12}$ | `tukey` $10^{-12}$ | `none` $10^{-2}$ | `tukey` $10^{-2}$ | `none` $10^{-1}$ | `tukey` $10^{-1}$ |
+|---|---|---|---|---|---|---|---|
+| 7×7 | clean | $3.3\times10^{-5}$ | $7.0\times10^{-1}$ | $8.5\times10^{-3}$ | $3.7\times10^{-2}$ | $3.3\times10^{-2}$ | $3.4\times10^{-2}$ |
+| 7×7 | 20 dB | $7.0\times10^{-1}$ | $7.0\times10^{-1}$ | $5.4\times10^{-1}$ | $5.4\times10^{-1}$ | $1.8\times10^{-1}$ | $1.8\times10^{-1}$ |
+| 51×51 | clean | $7.0\times10^{-1}$ | $6.8\times10^{-1}$ | $1.9\times10^{-1}$ | $7.5\times10^{-1}$ | $1.8\times10^{-1}$ | $3.8\times10^{-1}$ |
+| 51×51 | 20 dB | $7.0\times10^{-1}$ | $7.0\times10^{-1}$ | $6.0\times10^{-1}$ | $6.8\times10^{-1}$ | $2.4\times10^{-1}$ | $4.0\times10^{-1}$ |
+
+and how much of the spectrum each floor touches (of 32256 coefficients):
+
+| $\varepsilon$ | max gain | 7×7 floored | 51×51 floored |
+|---|---|---|---|
+| $10^{-12}$ | $10^{+12}$ (240 dB) | 0 | 0 |
+| $10^{-2}$ | $10^{+2}$ (40 dB) | 2779 (8.6 %) | 29995 (93.0 %) |
+| $10^{-1}$ | $10^{+1}$ (20 dB) | 19136 (59.3 %) | 31779 (98.5 %) |
+
+**What the table says.**
+
+1. **The floor has a genuine interior optimum, and the noise level is what
+   sets it.** For the 7×7 kernel on clean input accuracy is *best* at the
+   tightest floor and degrades monotonically as the floor rises
+   ($3.3\times10^{-5} \to 8.5\times10^{-3} \to 3.3\times10^{-2}$): every
+   floored coefficient is resolution thrown away. At 20 dB BSNR the same sweep
+   falls and then turns around — the demo prints that line too:
+
+   ```
+   floor sweep  (7, 7) at 20 dB BSNR -> 0.01:5.442e-01 0.1:1.816e-01 0.3:8.938e-02 1:1.068e-01
+   floor sweep (51, 51) at 20 dB BSNR -> 0.01:5.967e-01 0.1:2.370e-01 0.3:2.468e-01 1:2.914e-01
+   ```
+
+   a real minimum, at $\varepsilon \approx 0.3$ for the 7×7 kernel and
+   $\varepsilon \le 0.1$ for the 51×51 one. A floor of 1 is worse again,
+   because by then the filter has stopped restoring anything. The 20 dB
+   channel's noise-to-signal amplitude is $10^{-20/20} = 0.1$, so the optimum
+   sits within a small factor of $N/S$: the parameter has a *physical*
+   reading, not merely a legal range, and it moves when the noise level moves.
+   That is precisely the quantity a Wiener filter derives from the stored BSNR
+   instead of leaving to the caller (§7).
+2. **Too small a floor is worse than doing nothing.** The 51×51 kernel on
+   clean input restores to $7.0\times10^{-1}$ at $\varepsilon=10^{-12}$, while
+   the blurred image itself scores $3.2\times10^{-1}$. The unfloored division
+   turned float32 round-off into a plate-wide ripple. This is the honest
+   counter-example to "inverse filtering works": it does not, once $|H|$ falls
+   below the input's noise or quantisation.
+3. **The taper loses on every row it does not tie.** `tukey` costs four orders
+   of magnitude at the tight floor (0.70 against
+   $3.3\times10^{-5}$) because the ramp *creates* a border residual that the
+   same $1/|H|$ amplifies — and at $\varepsilon=10^{-2}$ it costs 4× even for
+   the 51×51 kernel that is wider than the 8 px margin
+   ($7.5\times10^{-1}$ against $1.9\times10^{-1}$), which was exactly the case
+   §5.4 predicted the ramp would win. It ties (to 1 %) only in the 7×7 20 dB
+   rows at $\varepsilon=10^{-1}$, where 59 % of the spectrum is already
+   floored and the border residual is floored with it. Hence
+   `DEFAULT_INVERSE_TAPER = "none"`.
+4. **A floored filter still restores.** At $\varepsilon=10^{-1}$, 59 % (7×7) and
+   98.5 % (51×51) of the coefficients are clamped, yet the output still beats
+   the blurred input by 3.3× and 1.7× respectively: the well-conditioned low
+   frequencies — the ones that carry the plate — are recovered exactly, and only
+   the destroyed high frequencies are given up. That is the correct way to
+   describe what a floor does: it keeps the part of the spectrum the blur did
+   not annihilate.
+
+A second, smaller experiment pins the same mechanism on synthetic data inside
+`tests/test_inverse_filter.py`: a $40\times40$ texture blurred with a 5×5
+Gaussian inverts to $4.7\times10^{-6}$ clean against a blur error of
+$1.3\times10^{-1}$ (a factor $2.8\times10^{4}$), while at 20 dB BSNR the same
+pair scores $4.4\times10^{-1}$ at $\varepsilon=10^{-12}$ and
+$9.2\times10^{-2}$ at $\varepsilon=10^{-1}$ — the same reversal, on data small
+enough to check by hand.
+
+### 12.4 The exact preprocessing applied before the FFT
+
+In the order the code performs it:
+
+1. **`validate_image(image)`** — 2-D, non-empty, finite, inside $[0,1]$;
+   returns a `float32` copy. A complex or out-of-range array raises here, not
+   three lines later inside the FFT.
+2. **`psf_frequency_response(psf, image.shape, tol=tol,
+   require_odd=require_odd, centre=centre)`** — validates the stored kernel
+   (shape, finiteness, non-negativity to $10^{-6}$, unit sum to $10^{-5}$,
+   **never renormalised**), zero-pads it to the image period, rolls
+   `size // 2` onto index $(0,0)$, applies a unit-modulus phase ramp when
+   `centre="auto"` measures a sub-pixel offset (§3.4), and transforms with
+   `np.fft.fft2`. Returns `complex128` with the image's shape.
+3. **`taper_edges(degraded, width=..., fraction=..., profile=...)`** —
+   multiplies by the separable window of §5.2. For `profile="none"` the
+   window is identically 1, so this step is a copy and nothing is tapered;
+   that is the arm the default selects and the arm §12.3 wins with.
+4. **`np.fft.fft2(windowed.astype(np.float64))`** — the full `fft2` on the
+   image period, the same convention as `degradation.blur_fft`, evaluated in
+   double precision although the image is stored in `float32`.
+5. **`safe_divide(spectrum, response, eps=eps)`** — the division of §12.2:
+   `complex128` in, `complex128` out, modulus-floored, phase-preserving.
+6. **`np.real(np.fft.ifft2(estimate))`** — for a real image and a real kernel
+   the quotient keeps Hermitian symmetry, so the inverse transform is real to
+   round-off; measured $\max|\operatorname{Im}| = 5.0\times10^{-8}$, and
+   `test_inverse_filter_quotient_of_real_data_stays_hermitian` pins it.
+7. **`clip_unit_interval(restored)`** — clip to $[0,1]$, cast to `float32`, and
+   **raise** on NaN/inf. The filter never repairs a non-finite value and never
+   substitutes a plausible pixel.
+
+What is deliberately **not** done, because each of these would be a silent lie:
+
+* no resizing, resampling or cropping, and no re-deriving of the kernel — the
+  stored `_psf` is consumed at the size it was written;
+* no renormalisation, sign flip or re-centring of the stored *array*: the
+  centring is a phase ramp on $H$, not an edit of $h$;
+* no padding beyond the zero-pad to the image period inside step 2 (and no
+  reflect padding, which belongs to the forward `blur_fft` and would make the
+  restoration model differ from the one it inverts);
+* no post-hoc brightness or contrast matching against a reference, which would
+  be test-set leakage;
+* no parity assumption: odd and even kernels both go through step 2 — the even
+  case is what §12.5 measures.
+
+### 12.5 Even-sized PSFs: the half pixel a floor cannot remove
+
+§3.4 established that `effective_psf` puts an even kernel's mass at
+$(K-1)/2$, half a pixel up/left of the index the plain rule centres, and that
+`centre="auto"` corrects it with a unit-modulus ramp. Run end-to-end through
+the filter, that geometry is unchanged by the divide:
+
+| experiment | `centre` | centroid drift | interior RMSE |
+|---|---|---|---|
+| blob at row 20.3, 8×8 Gaussian, $\varepsilon = 10^{-3}$ | `auto` | $0.0000$ px | $1.1\times10^{-6}$ |
+| | `pixel` | $+0.5000$ px | $2.8\times10^{-2}$ |
+| stored factor-2 pair (18×18), $\varepsilon = 10^{-2}$ | `auto` | $+0.0027$ px | $0.080$ |
+| | `pixel` | $+0.1762$ px | $0.201$ |
+
+**Why a bigger floor cannot fix this.** A translation is a *phase* ramp of
+unit modulus (the shift theorem of §3.2), so $|H|$ is identical under both
+centring rules and the floor — which acts on $|H|$ alone — cannot see the
+difference. The only repair is a phase correction, which is why it lives in
+the construction of $H$ and not in the division. The synthetic row is the
+clean demonstration (zero drift to 4 decimals against a full half pixel); in
+the stored-pair row the displacement is partly absorbed by the clipping and by
+the decimated plate's own centroid, which is why the *RMSE ratio* (2.5×) is the
+sturdier signature there than the centroid. Two tests pin it:
+`test_even_sized_psf_is_restored_without_a_half_pixel_shift` and
+`test_even_stored_kernel_keeps_the_decimated_plate_aligned`.
+
+### 12.6 Limitations — say these out loud
+
+1. **It is not universally effective, and this document does not claim it is.**
+   The 51×51 kernel on clean input restores *worse than the blur it was given*
+   ($7.0\times10^{-1}$ against $3.2\times10^{-1}$, §12.3).
+2. **It is a baseline, not a regulariser.** The floor bounds the gain; it
+   cannot distinguish signal from noise, so it cannot beat a filter that uses
+   the noise statistics (Wiener, step 4.3).
+3. **It cannot recover what $H$ destroyed.** At a notch the information is
+   gone; the floor substitutes a bounded, wrong value. No downstream step
+   recovers it — that is why binarisation (step 5) and metrics (step 8) must not
+   expect detail the blur removed.
+4. **Clipping is an extra nonlinearity inside the measured error.** The
+   restored plate is clipped to $[0,1]$ before scoring, so the RMSE above
+   includes the clipping error. That is deliberate (the image convention is
+   non-negotiable) but it means the numbers are not the pure linear-filter
+   error.
+5. **The border is meaningless under a taper.** Every number here is an
+   interior crop; a tapered restored frame must never be scored or binarised
+   (§5.3).
+6. **No PSNR or SSIM is reported in this phase.** This repository has no
+   implementation of either and step 8 owns them; adding one here would
+   duplicate a teammate's deliverable and silently define the team's metric.
+   The metric used is interior RMSE against $f$, and RMSE and PSNR are monotone
+   in each other for a fixed peak, so none of the orderings above depends on
+   the choice.
+7. **The experiments use the generative pipeline, not `degraded.npz`.** The
+   stored grid (471 MB) is gitignored and absent from this checkout; the
+   forward model here is the same step-2.2 code applied to `plates.npz`.
+8. **Two kernels, one plate, one seed per condition.** Enough to pin the
+   defaults and demonstrate the mechanism; not a survey. Step 8 runs the grid.
+9. **Wiener, CLS and Richardson–Lucy are not implemented.** They are steps
+   4.3–4.5 and they need nothing that this phase did not build (§7).
+
+---
+
+## 13. Phase 4.2 log
+
+| File | Change | Tests |
+|---|---|---|
+| `license_plate_restoration/restoration.py` | `inverse_filter` (+ the same preamble every later algorithm shares); `DEFAULT_INVERSE_TAPER`; `_floor_value`, now the single validator behind `near_zero_mask` and `safe_divide`; module docstring; demo table extended with the floor sweep | existing 124 tests on the module unchanged |
+| `tests/test_inverse_filter.py` | **new**, 39 tests, ten required categories plus a Hypothesis property | 39 |
+| `tests/test_restoration_audit.py` | two tests for the floor validator ($\varepsilon = \infty$, NaN, $0$, negative, and a non-numeric floor) | 58 |
+| `docs/restoration_foundation.md` | §5.4 answered, §10 inverse-filtering Q&As, §12, §13 | — |
+
+**Decisions, and what each cost.**
+
+| Decision | Alternative rejected | Evidence |
+|---|---|---|
+| default `profile="none"` **for this function only** | reuse the module default `tukey` | §12.3: `none` wins every row it does not tie |
+| default `eps = 1e-12` (textbook guard) | a "sensible" $10^{-2}$ | §12.3: any larger floor costs accuracy on clean input; the caller supplies the noise level, the library does not guess it |
+| `centre="auto"` inherited, not re-implemented | a local half-pixel fix inside the filter | §12.5: a shift is a phase, so it must be corrected in $H$ |
+| the floor validates once, in `_floor_value` | two independent checks | the audit found `eps=inf` accepted, and a string floor passing the mask then crashing on `eps * phase` |
+| `clip_unit_interval` still raises on non-finite output | replacing NaN with a plausible value | the phase spec forbids silent repair; the floor is what keeps the output finite |
+
+**Scope held.** `degradation.py`, `psf_builder.py`, `renderer.py`,
+`ccpd_loader.py`, `binarization.py` and everything under `data/` are
+untouched; the dataset was not rebuilt; `DEFAULT_TAPER_PROFILE` still reads
+`"tukey"` for the rest of the module; no public signature changed, and the
+two helper changes are backward-compatible except that they now *refuse*
+inputs that used to produce `inf`.
+
+**Verification.** `python -m pytest -q` → **262 passed, 6 skipped** (the six
+CCPD tests need the external `CCPD2019/` folder; no test was skipped, relaxed
+or deleted to accommodate this phase). The inverse-filter module alone gives
+**39 passed**, and the two module suites give 66 and 58. Module import is free
+of `SyntaxWarning` (`python -W error::SyntaxWarning`), which matters because the
+docstrings carry LaTeX.
+
+**Next.** Step 4.3 (Wiener) replaces the flat floor by
+$|H|^2/(|H|^2 + K)$ and uses the same `psf_frequency_response`,
+`taper_edges`, `safe_divide` and `clip_unit_interval`; the `K` it needs is the
+inverse of the BSNR the degradation grid already stores.

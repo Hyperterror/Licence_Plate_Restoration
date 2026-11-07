@@ -1,7 +1,7 @@
-"""Step 4.1 -- restoration foundation: validation, frequency response, edge taper.
+"""Step 4.1/4.2 -- restoration: validation, response, taper, inverse filter.
 
-This module holds the pieces that *all four* restoration algorithms of step 4.2
-need, and nothing algorithm-specific:
+This module holds the pieces that *all four* restoration algorithms share plus
+the first of them:
 
 * :func:`validate_image` / :func:`validate_psf` / :func:`validate_image_shape`
   -- the integration contract, checked once at the entry point of every
@@ -12,10 +12,13 @@ need, and nothing algorithm-specific:
   wrap-around that a plain FFT deconvolution would fold into the plate;
 * :func:`safe_divide` / :func:`near_zero_mask` / :func:`clip_unit_interval`
   -- the small numerical helpers that keep the later stages finite and inside
-  the ``[0, 1]`` image convention.
+  the ``[0, 1]`` image convention;
+* :func:`inverse_filter` -- step 4.2's frequency-domain inverse filter,
+  ``\\hat{F} = G / H`` with a floored denominator, built entirely from the four
+  pieces above.
 
-Inverse filtering, Wiener, constrained least squares and Richardson--Lucy are
-deliberately *not* here (step 4.2).  They all reduce to "build ``H`` with
+Wiener, constrained least squares and Richardson--Lucy are deliberately *not*
+here (steps 4.3-4.5).  They all reduce to "build ``H`` with
 :func:`psf_frequency_response`, deconvolve the tapered image, clip the
 result", which is exactly the surface this module exposes.
 
@@ -122,6 +125,17 @@ DEFAULT_TAPER_FRACTION = 0.1
 TAPER_PROFILES = ("none", "tukey", "hann", "linear")
 DEFAULT_TAPER_PROFILE = "tukey"
 
+# Taper arm for :func:`inverse_filter`.  The global default above stays
+# ``tukey`` (the safe choice for input without a margin); this one follows the
+# measurement on *this* dataset.  Every plate carries a uniform 8 px margin, so
+# the circular model is already exact (wrap step 0.0000), and a ramp can then
+# only add model error exactly where ``|H|`` is small -- which the inverse
+# filter multiplies.  Measured on a rendered plate, clean input: 7x7 motion
+# kernel 3.3e-5 RMS untapered vs 0.70 tapered; 51x51 (wider than the margin,
+# the case the ramp was meant for) 0.124 vs 0.647 at eps=1e-2.  Section 12.3 of
+# ``docs/restoration_foundation.md``.
+DEFAULT_INVERSE_TAPER = "none"
+
 # Centre convention for :func:`psf_frequency_response`.  ``auto`` removes the
 # sub-pixel gap between the kernel's centre of mass and index ``size // 2``
 # (0 px for an odd kernel, -0.5 px for an even stored one); ``pixel`` is the
@@ -139,6 +153,11 @@ CENTRE_OFFSET_TOL = 0.05
 
 # Denominator floor for :func:`safe_divide`.  Small enough to be irrelevant
 # for real spectra, large enough to keep ``|a / b| <= |a| / eps`` finite.
+# It is also the floor :func:`inverse_filter` uses by default, i.e. the
+# textbook inverse filter: the guard against dividing by exactly zero, and
+# nothing more.  A noisy input needs a much larger floor (section 12.3 of
+# ``docs/restoration_foundation.md``), which is the caller's choice, not a
+# silent default.
 DEFAULT_EPS = 1e-12
 
 
@@ -787,6 +806,25 @@ def taper_edges(image, width: int | None = None,
 # --------------------------------------------------------------------------- #
 # Shared numerical helpers
 # --------------------------------------------------------------------------- #
+def _floor_value(eps) -> float:
+    """Validate a denominator floor and return it as a plain ``float``.
+
+    One implementation, used by :func:`near_zero_mask` and
+    :func:`safe_divide`, so the two can never disagree about what a legal
+    floor is -- and so a floor given as ``np.float32`` is compared and
+    multiplied as the same number in both places.
+    """
+    if isinstance(eps, (str, bytes)):
+        raise ValueError(f"eps must be a number, got {eps!r}")
+    try:
+        value = float(eps)
+    except (TypeError, ValueError) as exc:
+        raise ValueError(f"eps must be a number, got {eps!r}") from exc
+    if not np.isfinite(value) or value <= 0.0:
+        raise ValueError(f"eps must be > 0 and finite, got {eps!r}")
+    return value
+
+
 def near_zero_mask(denominator, eps: float = DEFAULT_EPS) -> np.ndarray:
     """Boolean mask of the entries :func:`safe_divide` had to clamp.
 
@@ -804,13 +842,20 @@ def near_zero_mask(denominator, eps: float = DEFAULT_EPS) -> np.ndarray:
     Raises
     ------
     ValueError
-        If ``eps`` is not positive or the input holds a NaN/inf.
+        If ``eps`` is not a finite number ``> 0`` or the input holds a
+        NaN/inf: this helper bounds a division, it does not repair input.
+
+    Notes
+    -----
+    The floor is validated by :func:`_floor_value`, so ``eps=inf`` is refused
+    rather than accepted: an infinite floor would turn every coefficient into
+    ``inf * phase`` and, where a phase component is exactly 0, into a NaN --
+    a diverged answer that looks like a numerical bug in the caller.
     """
     array = _as_numeric_array(denominator, "denominator")
-    if not eps > 0.0:
-        raise ValueError(f"eps must be > 0, got {eps!r}")
+    floor = _floor_value(eps)
     _require_finite(array, "denominator")
-    return np.abs(array) <= eps
+    return np.abs(array) <= floor
 
 
 def safe_divide(numerator, denominator, eps: float = DEFAULT_EPS) -> np.ndarray:
@@ -861,13 +906,14 @@ def safe_divide(numerator, denominator, eps: float = DEFAULT_EPS) -> np.ndarray:
     _require_finite(numerator_array, "numerator", hint)
     _require_finite(denominator_array, "denominator", hint)
 
-    mask = near_zero_mask(denominator_array, eps=eps)
+    floor = _floor_value(eps)
+    mask = near_zero_mask(denominator_array, eps=floor)
     magnitude = np.abs(denominator_array)
     # b / |b| is the unit vector along b; a zero coefficient has no phase, so
     # the floor falls back to +eps (real) / eps + 0j.
     phase = np.divide(denominator_array, magnitude,
                       out=np.ones_like(denominator_array), where=magnitude > 0)
-    floored = np.where(mask, eps * phase, denominator_array)
+    floored = np.where(mask, floor * phase, denominator_array)
     return numerator_array / floored
 
 
@@ -918,11 +964,174 @@ def clip_unit_interval(values, name: str = "values",
 
 
 # --------------------------------------------------------------------------- #
+# Inverse filtering (step 4.2)
+# --------------------------------------------------------------------------- #
+def inverse_filter(image, psf, eps: float = DEFAULT_EPS,
+                   width: int | None = None,
+                   fraction: float = DEFAULT_TAPER_FRACTION,
+                   profile: str = DEFAULT_INVERSE_TAPER,
+                   centre: str = DEFAULT_CENTRE_MODE,
+                   require_odd: bool = False,
+                   tol: float = PSF_SUM_TOL) -> np.ndarray:
+    """Recover a plate from its blur by dividing the spectrum by ``H``.
+
+    The forward model this inverts is ``g = h * f + n`` at the image's own
+    resolution (a decimated image is restored at *its* resolution, with the
+    ``_psf`` stored beside it -- see the module note).  The convolution
+    theorem turns ``*`` into a product,
+
+    .. math:: G(u,v) = H(u,v)\\,F(u,v) + N(u,v), \\qquad
+              G = \\mathcal{F}\\{g\\},\\; H = \\mathcal{F}\\{h\\},
+
+    so the unknown ``F`` is recovered by one division per DFT coefficient,
+
+    .. math:: \\hat{F}(u,v) = \\frac{G(u,v)}{H(u,v)}, \\qquad
+              \\hat{f} = \\mathcal{F}^{-1}\\{\\hat{F}\\},
+
+    followed by an inverse transform.  That is the whole algorithm.  What
+    makes it worth a page of documentation is that the division is ill posed:
+    where ``|H|`` is small the same quotient multiplies ``N`` far more than it
+    multiplies ``F``, so the noise -- not the picture -- determines the answer.
+
+    Exact recipe, in this order (this *is* the preprocessing, nothing is
+    implicit):
+
+    1. the image is validated as grayscale ``float32`` in ``[0, 1]``;
+    2. ``H`` is built by :func:`psf_frequency_response` on the image's own
+       grid, with ``centre="auto"`` the kernel's centre of mass on the FFT
+       origin (no stored kernel is resized, renormalised or regenerated);
+    3. the border is faded with :func:`taper_edges` -- or left alone for
+       ``profile="none"``, which is the identity;
+    4. ``G = fft2(windowed_image)``;
+    5. ``\\hat{F} = G / H`` with the denominator floored by ``eps``
+       (:func:`safe_divide`, which keeps the complex values and the phase);
+    6. ``real(ifft2(\\hat{F}))`` -- the true image is real, and for a real
+       image and a real kernel the quotient is Hermitian to round-off, so the
+       imaginary part that is dropped here is round-off, not signal;
+    7. ``clip_unit_interval``: values back into ``[0, 1]`` and ``float32``.
+
+    That last step is not cosmetic.  A quotient at a floored coefficient can
+    exceed 1 by orders of magnitude; without clipping, ``binarize`` (step 5)
+    would see an image whose nominal range is meaningless, and a negative
+    undershoot near an edge would be read as ink and fatten the glyphs.
+
+    Parameters
+    ----------
+    image:
+        The degraded plate, ``(rows, cols)`` in ``[0, 1]``.  Validated by
+        :func:`validate_image`; a copy is taken, so the caller's array is not
+        modified.
+    psf:
+        The blur kernel that produced ``image``, consumed **as-is** (the
+        stored ``<key>_psf``).  Validated by :func:`validate_psf`; an even
+        side is accepted because half of the factor-2 stored kernels have one,
+        and ``centre="auto"`` handles the half-pixel convention that comes
+        with it.
+    eps:
+        Denominator floor: the smallest ``|H|`` the division is allowed to
+        use.  For ``|H| <= eps`` the denominator is replaced by
+        ``eps * H / |H|``, i.e. the same direction with a bounded magnitude, so
+        the quotient at that coefficient is bounded by ``|G| / eps`` instead
+        of diverging.  The default :data:`DEFAULT_EPS` (``1e-12``) makes this
+        the textbook inverse filter -- a guard against dividing by an exact
+        zero, nothing more.  **Raising it is the only knob this filter has**:
+        with ``eps`` at 1e-2 the gain at a notch is capped at 100, the noise
+        that rides on the notch is capped with it, and the price is that the
+        detail the notch destroyed is capped too.  There is no single correct
+        value: it trades resolution of the nulled frequencies against noise
+        amplification, which is exactly the quantity a Wiener filter sets from
+        the measured BSNR instead of guessing.  Measured trade-off in
+        ``docs/restoration_foundation.md`` section 12.3.
+    width, fraction, profile:
+        Forwarded to :func:`taper_edges`, so the arms of the edge-taper
+        comparison are selectable per call.  ``profile="none"`` runs the
+        filter on the raw image and is the default
+        (:data:`DEFAULT_INVERSE_TAPER`) *because it was measured*: on this
+        dataset the 8 px margin already makes the circular model exact, so the
+        ramp can only add model error where ``|H|`` is small -- and the
+        inverse filter amplifies precisely that.  Measured on a rendered
+        plate, clean input, 7x7 motion kernel: 3.3e-5 RMS untapered against
+        0.70 tapered.  ``profile="tukey"`` remains one keyword away, and it is
+        the right choice for an input without a margin; the global
+        :data:`DEFAULT_TAPER_PROFILE` was not changed by this phase.
+    centre:
+        ``"auto"`` (default) or ``"pixel"``, forwarded to
+        :func:`psf_frequency_response`.  See :func:`psf_centre_offset` for the
+        offset ``"auto"`` compensates.
+    require_odd:
+        Forwarded to :func:`validate_psf` for the kernel.  ``False`` (default)
+        accepts the even-sided stored kernels; ``True`` enforces the
+        ``psf_builder`` contract and is what a hand-built kernel should use.
+    tol:
+        Absolute tolerance on ``sum(psf) == 1``.
+
+    Returns
+    -------
+    np.ndarray
+        ``float32`` estimate of the sharp plate, same shape as ``image``,
+        every value finite and inside ``[0, 1]``.  It is the estimate of the
+        *windowed* plate: with a taper the border carries the window, so only
+        the interior plateau is comparable with the reference.
+
+    Raises
+    ------
+    ValueError
+        If the image breaks the grayscale convention, the kernel fails
+        :func:`validate_psf` or is larger than the image, ``eps`` is not a
+        finite number ``> 0``, ``centre`` or ``profile`` is unknown, or the
+        taper parameters are inconsistent with the profile.  A diverged
+        quotient is not masked: :func:`safe_divide` raises on a non-finite
+        input and :func:`clip_unit_interval` raises on a non-finite output, so
+        a NaN/inf can never reach a caller disguised as a plausible image.
+
+    Notes
+    -----
+    Limitations, all of them inherent to the filter and none hidden by the
+    interface:
+
+    * ``H`` has genuine zeros and near-zeros (measured ``|H|`` minimum
+      ``2.1e-6`` for a 7x7 motion kernel on a plate), so the filter is only
+      meaningful at frequencies where ``|H|`` is comfortably above the noise.
+      A larger ``eps`` buys a stable image by giving up the nulled detail.
+    * The floor does not remove the noise amplification *around* the notches;
+      it only bounds it.  At 20 dB BSNR the best a floor can do is modestly
+      beat the blurred input (7x7: 8.9e-2 restored against 1.1e-1 blurred), and
+      the position of the optimum moves with the noise level -- which is exactly
+      why step 4.3 sets its ``K`` from the measured BSNR instead of a constant.
+    * The estimate cannot be better than the model: ``H`` must belong to the
+      image (the stored ``_psf`` is resolution-matched), and a decimation the
+      model does not describe is not recoverable.
+    * Clipping is lossy.  Saturated pixels hide how far the quotient overshot,
+      so report ``eps`` alongside any restored image you quote.
+
+    Examples
+    --------
+    >>> import numpy as np
+    >>> from license_plate_restoration.restoration import inverse_filter
+    >>> image = np.full((16, 16), 0.5, dtype=np.float32)
+    >>> delta = np.array([[1.0]], dtype=np.float32)
+    >>> np.allclose(inverse_filter(image, delta), image, atol=1e-6)
+    True
+    """
+    degraded = validate_image(image, name="image")
+    response = psf_frequency_response(psf, degraded.shape, tol=tol,
+                                      require_odd=require_odd, centre=centre)
+
+    windowed = taper_edges(degraded, width=width, fraction=fraction,
+                           profile=profile)
+    spectrum = np.fft.fft2(windowed.astype(np.float64))
+    estimate = safe_divide(spectrum, response, eps=eps)
+    restored = np.real(np.fft.ifft2(estimate))
+    return clip_unit_interval(restored, name="restored image")
+
+
+# --------------------------------------------------------------------------- #
 # Manual check: python -m license_plate_restoration.restoration
 # --------------------------------------------------------------------------- #
 def _demo() -> None:  # pragma: no cover
-    """Print the numbers the docs quote: response, complex arithmetic, centring."""
+    """Print the numbers the docs quote: response, centring, taper, inverse."""
     from license_plate_restoration.degradation import (
+        add_noise,
         blur_fft,
         downsample,
         effective_psf,
@@ -938,6 +1147,12 @@ def _demo() -> None:  # pragma: no cover
         rows = np.arange(image.shape[0], dtype=np.float64)[:, None]
         mass = np.clip(np.asarray(image, dtype=np.float64), 0.0, None)
         return float((mass * rows).sum() / mass.sum())
+
+    def rmse(estimate, reference, margin: int = 12) -> float:
+        error = (np.asarray(estimate, np.float64)
+                 - np.asarray(reference, np.float64))
+        return float(np.sqrt(np.mean(error[margin:-margin,
+                                           margin:-margin] ** 2)))
 
     plate, text = generate_plates(1, seed=7)[0]
     psf = make_motion_psf(3, 8.0)
@@ -1011,6 +1226,52 @@ def _demo() -> None:  # pragma: no cover
         print(f"{profile:>8} {100.0 * float(np.mean(1.0 - candidate)):>9.2f}% "
               f"{candidate[plate.shape[0] // 2, plate.shape[1] // 2]:>8.4f} "
               f"{np.abs(np.diff(middle_row, 2)).max():>11.4f}")
+
+    # Inverse filtering: what the floor and the taper arm actually cost.
+    print()
+    print(f"{'kernel':>7} {'noise':>6} {'taper':>5} {'eps':>7} "
+          f"{'rmse':>9} {'floored':>8}")
+    for length, radius in ((3, 0), (21, 4)):
+        kernel = combine_psfs(make_motion_psf(length, 8.0),
+                             make_defocus_psf(radius))
+        blurred = blur_fft(plate, kernel)
+        floored_by_eps = {eps: int(np.count_nonzero(
+            near_zero_mask(psf_frequency_response(kernel, plate.shape), eps)))
+            for eps in (DEFAULT_EPS, 1e-2, 1e-1)}
+        for label, degraded in (("clean", blurred),
+                                ("20 dB", add_noise(blurred, 20.0, seed=3))):
+            for taper, eps in (("none", DEFAULT_EPS), ("none", 1e-2),
+                               ("tukey", DEFAULT_EPS), ("tukey", 1e-2),
+                               ("none", 1e-1), ("tukey", 1e-1)):
+                estimate = inverse_filter(degraded, kernel, eps=eps,
+                                          profile=taper)
+                print(f"{str(kernel.shape):>7} {label:>6} {taper:>5} "
+                      f"{eps:>7.0e} {rmse(estimate, plate):>9.3e} "
+                      f"{floored_by_eps[eps]:>8d}")
+
+    # The floor is a real knob: at 20 dB BSNR it has an interior optimum.
+    for length, radius in ((3, 0), (21, 4)):
+        kernel = combine_psfs(make_motion_psf(length, 8.0),
+                              make_defocus_psf(radius))
+        noisy = add_noise(blur_fft(plate, kernel), 20.0, seed=3)
+        sweep = " ".join(
+            f"{eps:g}:{rmse(inverse_filter(noisy, kernel, eps=eps),
+                            plate):.3e}"
+            for eps in (1e-2, 1e-1, 3e-1, 1.0))
+        print(f"floor sweep {str(kernel.shape):>7} at 20 dB BSNR -> {sweep}")
+
+    # The even stored kernel: does the filter land on the reference?
+    full = combine_psfs(make_motion_psf(15, 20.0), make_defocus_psf(3))
+    stored = effective_psf(full, 2)
+    observed = downsample(blur_fft(plate, full), 2)
+    reference = downsample(plate, 2)
+    print(f"factor 2: stored {stored.shape}, offset "
+          f"{psf_centre_offset(stored)[0]:+.3f} px")
+    for mode in CENTRE_MODES:
+        estimate = inverse_filter(observed, stored, eps=1e-2, centre=mode)
+        drift = centroid(estimate) - centroid(reference)
+        print(f"  centre={mode:>5} centroid drift {drift:+.4f} px   "
+              f"rmse {rmse(estimate, reference):.3f}")
 
 
 if __name__ == "__main__":  # pragma: no cover
