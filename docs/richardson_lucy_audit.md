@@ -135,6 +135,21 @@ The hardened implementation correctly performs sensitivity normalisation ($s = H
   * *Oracle benchmarks:* Swept hyper-parameters against ground-truth clean plate to measure theoretical performance upper bound.
 * **Resolution:** Fully transparent in code, console logs, and documentation.
 
+#### Finding D.3: Poisson Simulation Upper-Tail Truncation & Calibrated Headroom Scaling (Stage 4.5.2)
+* **Severity:** Critical (Audited and Corrected in Stage 4.5.2)
+* **File:** `experiments/run_richardson_lucy_experiment.py`, `experiments/richardson_lucy_experiment_results.json`
+* **Original Defect (Stage 4.5):** Poisson observations were simulated via `counts = rng.poisson(photons * blurred)` and clipped to $[0, 1]$ via `clip_unit_interval(counts / photons)`. Because Poisson distributions are unbounded above, observations naturally fluctuate above the nominal count at bright pixels.
+* **Audit Quantification (Synthetic Plate, $96 \times 336 = 32,256$ pixels):**
+  * *Exceeding Pixels:* At $N=1,000$ photons, exactly **$7,851$ pixels (24.34%)** exceeded $1.0$, reaching values up to $1.1390$.
+  * *Photometric Bias:* On white background pixels ($n=15,400$), clipping introduced a systematic negative bias of **$-0.0125$** (mean reduced from $1.00025$ to $0.98751$).
+  * *Severe Variance Truncation:* Truncating the upper tail eliminated $66.79\%$ of the white-pixel noise variance ($3.321\times 10^{-4}$ vs theoretical $1.000\times 10^{-3}$), acting as an artificial non-linear noise filter that flattered Stage 4.5 restoration scores.
+* **API Contract & Methodological Correction:**
+  * The public restoration API (`validate_image`) strictly enforces input values in $[0, 1]$. Direct normalized counts $C / N$ exceed $1.0$ and cannot be consumed by public filters without either clipping (the defect) or scaling.
+  * *Methodology 1 (Calibrated Headroom Scaling, 10 Seeds, Public API):* Modeled physical sensor exposure with calibrated headroom $s_{\text{scale}} = 0.70$ (leaving $> 11\sigma$ margin below sensor saturation at $N=1,000$ photons). The observation $g_{\text{obs}} = C / N \in [0, 1]$ is strictly unclipped ($P(C > N) < 10^{-28}$) and consumed directly by `richardson_lucy_filter`, `wiener_filter`, and `cls_filter`. Output is rescaled by $1 / s_{\text{scale}}$. RL Deployable achieves $0.0668 \pm 0.0037$ RMSE vs CLS Deployable $0.0875 \pm 0.0011$ (RL wins by $+2.3$ dB).
+  * *Methodology 2 (Unconstrained Count-Domain RL, 10 Seeds, Theoretical Reference):* Directly iterates on raw integer counts $C \sim \operatorname{Poisson}(N b)$ in the photon-count domain without headroom scaling. Deployable RL achieves $0.0630 \pm 0.0039$ RMSE. Explicitly documented that this reference cannot be consumed by the public API filters due to `validate_image`'s $[0, 1]$ contract.
+  * *Traceability:* Stage 4.5 single-seed clipped results are retained under `superseded_clipped_stage4_5` with explicit status markings.
+* **Resolution:** Corrected, audited, and verified across 10 random seeds.
+
 ---
 
 ### Category E: Repository & Architecture Audit
@@ -143,6 +158,7 @@ The hardened implementation correctly performs sensitivity normalisation ($s = H
 * **Severity:** Critical (Verified)
 * **Evidence:**
   * Only NumPy was used (zero SciPy, OpenCV restoration, scikit-image, or PyTorch).
+  * Restoration algorithms (`restoration.py`) and public contracts were untouched.
   * Teammate-owned files (`degradation.py`, `renderer.py`, `ccpd_loader.py`, `binarizer.py`, `psf_builder.py`) were untouched.
   * Integration contract: public API matches `inverse_filter`, `wiener_filter`, and `cls_filter`.
 * **Resolution:** Verified.
@@ -161,6 +177,7 @@ The hardened implementation correctly performs sensitivity normalisation ($s = H
 | 6 | Unit and regression tests | `tests/test_richardson_lucy.py` | Expanded test suite to 68 tests covering sensitivity, tapering, and resolutions. |
 | 7 | Transparent experiment benchmarking | `experiments/run_richardson_lucy_experiment.py` | Added deployable vs oracle reporting across Gaussian and Poisson studies. |
 | 8 | Foundation documentation & Viva prep | `docs/restoration_foundation.md` | Documented sensitivity derivation, Option B rationale, deployable vs oracle, and Viva Q&A. |
+| 9 | Poisson upper-tail clipping audit & headroom scaling | `experiments/run_richardson_lucy_experiment.py`, `docs/restoration_foundation.md` | Quantified 24.3% clipping defect; implemented unclipped headroom scaling ($s_{\text{scale}}=0.70$) across 10 seeds and count-domain reference benchmark. |
 
 ---
 
@@ -169,7 +186,7 @@ The hardened implementation correctly performs sensitivity normalisation ($s = H
 * **Gate 1 — Mathematical correctness:** **PASSED** (Derived from Poisson log-likelihood; exact adjoint duality; explicit sensitivity normalisation $s = \sum h$; flux conserving).
 * **Gate 2 — Numerical reliability:** **PASSED** (Protected divisions; finite outputs; range $[0, 1]$; zero boundary blowup under Option B).
 * **Gate 3 — Test coverage:** **PASSED** (68 RL tests, 444 total repository tests passing, 0 regressions).
-* **Gate 4 — Experimental evidence:** **PASSED** (10-seed benchmarks; iteration trajectories; Gaussian vs Poisson study; transparent deployable vs oracle reporting).
-* **Gate 5 — Documentation:** **PASSED** (Complete viva questions, derivations, tapering rationale, and comparative matrices in `docs/restoration_foundation.md`).
+* **Gate 4 — Experimental evidence:** **PASSED** (10-seed benchmarks; iteration trajectories; Gaussian vs Poisson study; Poisson clipping audited; headroom scaling eliminates truncation).
+* **Gate 5 — Documentation:** **PASSED** (Complete viva questions, derivations, tapering rationale, Poisson audit, and comparative matrices in `docs/restoration_foundation.md`).
 * **Gate 6 — Independent audit:** **PASSED** (This document records findings, severity, evidence, corrections, and resolutions).
 * **Gate 7 — Git delivery:** Ready for commit and push to `ashish/restoration-and-experiments`.
