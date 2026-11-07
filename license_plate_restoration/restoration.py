@@ -1,7 +1,7 @@
-"""Step 4.1/4.2 -- restoration: validation, response, taper, inverse filter.
+"""Step 4.1-4.3 -- restoration: validation, response, taper, inverse, Wiener.
 
 This module holds the pieces that *all four* restoration algorithms share plus
-the first of them:
+the first three of them:
 
 * :func:`validate_image` / :func:`validate_psf` / :func:`validate_image_shape`
   -- the integration contract, checked once at the entry point of every
@@ -15,12 +15,15 @@ the first of them:
   the ``[0, 1]`` image convention;
 * :func:`inverse_filter` -- step 4.2's frequency-domain inverse filter,
   ``\\hat{F} = G / H`` with a floored denominator, built entirely from the four
-  pieces above.
+  pieces above;
+* :func:`wiener_filter` / :func:`wiener_k_from_bsnr` -- step 4.3's minimum mean
+  square error filter, ``\\hat{F} = H^{*} G / (|H|^{2} + K)``, and the BSNR to
+  ``K`` conversion derived from ``degradation.noise_sigma``.
 
-Wiener, constrained least squares and Richardson--Lucy are deliberately *not*
-here (steps 4.3-4.5).  They all reduce to "build ``H`` with
-:func:`psf_frequency_response`, deconvolve the tapered image, clip the
-result", which is exactly the surface this module exposes.
+Constrained least squares and Richardson--Lucy are deliberately *not* here
+(steps 4.4-4.5).  They reduce to the same recipe -- "build ``H`` with
+:func:`psf_frequency_response`, filter the tapered image, clip the result" --
+which is exactly the surface this module exposes.
 
 Inherited conventions (do not re-derive, do not change)
 -------------------------------------------------------
@@ -806,13 +809,39 @@ def taper_edges(image, width: int | None = None,
 # --------------------------------------------------------------------------- #
 # Shared numerical helpers
 # --------------------------------------------------------------------------- #
+def _finite_scalar(value, name: str, minimum: float = 0.0,
+                   exclusive: bool = False) -> float:
+    """Validate a real, finite scalar parameter and return it as ``float``.
+
+    One gate for every numeric parameter that is not a denominator floor, so a
+    string, a NaN, an infinity or a negative number produces the same kind of
+    ``ValueError`` naming the parameter -- instead of a ``TypeError`` raised
+    three frames deeper, inside the arithmetic.
+    """
+    if isinstance(value, (str, bytes)):
+        raise ValueError(f"{name} must be a number, got {value!r}")
+    try:
+        result = float(value)
+    except (TypeError, ValueError) as exc:
+        raise ValueError(f"{name} must be a number, got {value!r}") from exc
+    if not np.isfinite(result):
+        raise ValueError(f"{name} must be a finite number, got {value!r}")
+    if exclusive and result <= minimum:
+        raise ValueError(f"{name} must be > {minimum:g}, got {value!r}")
+    if not exclusive and result < minimum:
+        raise ValueError(f"{name} must be >= {minimum:g}, got {value!r}")
+    return result
+
+
 def _floor_value(eps) -> float:
     """Validate a denominator floor and return it as a plain ``float``.
 
     One implementation, used by :func:`near_zero_mask` and
     :func:`safe_divide`, so the two can never disagree about what a legal
     floor is -- and so a floor given as ``np.float32`` is compared and
-    multiplied as the same number in both places.
+    multiplied as the same number in both places.  The wording is ``eps``'s
+    own ("must be > 0 and finite"), pinned by the step 4.1 tests, which is why
+    this is not routed through the generic :func:`_finite_scalar`.
     """
     if isinstance(eps, (str, bytes)):
         raise ValueError(f"eps must be a number, got {eps!r}")
@@ -1126,6 +1155,315 @@ def inverse_filter(image, psf, eps: float = DEFAULT_EPS,
 
 
 # --------------------------------------------------------------------------- #
+# Wiener filtering (step 4.3)
+# --------------------------------------------------------------------------- #
+def wiener_k_from_bsnr(bsnr_db) -> float:
+    """Convert a target BSNR into the Wiener regularisation constant ``K``.
+
+    The conversion is derived from the repository's own definition of the
+    quantity, not from the way its name is usually read.
+    ``degradation.noise_sigma`` fixes it once and for all::
+
+        sigma = sqrt(var(img) / 10 ** (bsnr_db / 10))      # img = h * f
+
+    so the repository's BSNR is a **power** ratio in decibels (``10 log10``,
+    not ``20 log10``) between the *blurred* plate and the noise,
+
+    .. math:: \\mathrm{BSNR}_{dB}
+              = 10 \\log_{10} \\frac{\\operatorname{var}(h*f)}
+              {\\operatorname{var}(n)} .
+
+    ``degradation.measure_bsnr`` reports the same quantity as
+    ``10 * log10(var(clean) / var(noisy - clean))``, and ``add_noise`` has
+    already made that measurement true of the *clipped* noisy image, so the
+    number a caller passes here describes the degradation that was applied.
+    Write the linear, dimensionless ratio
+
+    .. math:: \\rho = 10^{-\\mathrm{BSNR}_{dB}/10}
+              \\quad\\Longleftrightarrow\\quad
+              \\operatorname{var}(n)
+              = \\rho \\operatorname{var}(h*f) .
+
+    ``rho`` is linear and ``<= 1`` for every level this project uses
+    (40 dB -> 1e-4, 30 dB -> 1e-3, 20 dB -> 1e-2); the decibels are what the
+    caller types and what :func:`degradation.add_noise` documents.  Mixing
+    the two up is the classic error: feeding ``30`` where ``1e-3`` belongs
+    regularises 30 000x too hard and returns a nearly black image.
+
+    The Wiener denominator wants the noise-to-signal ratio of the *sharp*
+    plate, so the blur has to be undone somewhere.  It is undone by the
+    observation model itself.  Signal and noise are independent and the
+    noise is zero-mean, so the degraded image's variance splits exactly:
+
+    .. math:: \\operatorname{var}(g)
+              = \\operatorname{var}(h*f) + \\operatorname{var}(n)
+              = \\operatorname{var}(h*f)\\,(1 + \\rho) .
+
+    Estimating the signal power by the observed power -- the only one
+    available at restoration time -- gives
+
+    .. math:: K = \\frac{\\operatorname{var}(n)}
+              {\\operatorname{var}(g)}
+              = \\frac{\\rho \\operatorname{var}(h*f)}
+                     {\\operatorname{var}(h*f)\\,(1 + \\rho)}
+              = \\frac{\\rho}{1 + \\rho} .
+
+    Four points worth quoting in the viva:
+
+    * ``K = rho / (1 + rho)`` is the honest form.  ``K = rho``, i.e. the
+      textbook ``1 / BSNR_linear``, is its small-noise limit: the two agree
+      to within 1% at every level in ``degradation.BSNR_LEVELS``, so the
+      naive rule is *nearly* right **under this repository's convention** --
+      but they differ by a factor two at 0 dB, and the naive rule would be
+      wrong outright if the BSNR had been defined against the sharp plate.
+    * No kernel appears.  ``rho`` fixes the noise power and the observation
+      fixes the signal power, so the PSF does not enter the conversion at
+      all; it enters the filter through ``|H|^2``.  A consequence worth
+      stating: the same BSNR yields the same ``K`` for a 7x7 and a 51x51
+      kernel, and section 14.3 shows the empirical optimum barely moves with
+      the kernel either.
+    * The plausible-looking alternative, ``K = rho * sum(h**2)``, is **not**
+      used.  It follows from assuming a white plate -- Parseval gives
+      ``mean(|H|^2) = sum(h**2)``, hence ``var(h*f) = sum(h**2) var(f)`` --
+      and a plate is not white: its power sits where ``|H| ~ 1``.  Measured
+      on a rendered plate, ``var(h*f)/var(f)`` is 0.771 for the 7x7 kernel
+      against ``sum(h**2) = 0.109`` (0.277 against 0.003 for 51x51), so that
+      route lands one to two orders of magnitude below the useful ``K`` and
+      restores 1.9-2.9x worse at 20-30 dB (section 14.4 of the docs).  It is
+      recorded there as a negative result.
+    * ``K`` is a per-frequency ratio collapsed to one scalar.  The flat
+      spectrum is a model of the *average*; the derived value sits 1.04-1.35x
+      (in RMSE) from the empirical optimum on the four noisy rows of section
+      14.3.
+
+    Parameters
+    ----------
+    bsnr_db:
+        Target BSNR in decibels, the same units ``degradation.add_noise``
+        takes: 40 is nearly clean, 20 is very noisy.  Must be a finite
+        number; the noise-free limit is not a BSNR but ``K=0`` on
+        :func:`wiener_filter`.
+
+    Returns
+    -------
+    float
+        ``K`` in ``[0, 1)``, the noise-to-signal *power* ratio the Wiener
+        denominator adds to ``|H|^2``.
+
+    Raises
+    ------
+    ValueError
+        If ``bsnr_db`` is not a finite number.  A negative value is accepted
+        -- it means noise stronger than the blurred signal, which yields
+        ``K > 0.5`` -- but it is far outside anything this dataset uses.
+
+    Examples
+    --------
+    >>> f"{wiener_k_from_bsnr(40.0):.3e}"   # barely regularised
+    '9.999e-05'
+    >>> round(wiener_k_from_bsnr(20.0), 6)      # heavily regularised
+    0.009901
+    >>> round(wiener_k_from_bsnr(0.0), 6)       # the 1 / (1 + rho) factor
+    0.5
+    """
+    # Any finite level is meaningful: negative decibels mean noise stronger
+    # than the blurred signal, and K = rho / (1 + rho) stays inside (0, 1).
+    level = _finite_scalar(bsnr_db, "bsnr_db", minimum=-np.inf)
+    ratio = 10.0 ** (-level / 10.0)
+    return float(ratio / (1.0 + ratio))
+
+
+def wiener_filter(image, psf, K: float | None = None, *,
+                  bsnr_db: float | None = None,
+                  width: int | None = None,
+                  fraction: float = DEFAULT_TAPER_FRACTION,
+                  profile: str = DEFAULT_INVERSE_TAPER,
+                  centre: str = DEFAULT_CENTRE_MODE,
+                  require_odd: bool = False,
+                  tol: float = PSF_SUM_TOL) -> np.ndarray:
+    """Recover a plate by minimum mean square error (the Wiener filter).
+
+    The inverse filter of step 4.2 divides by ``H``, so every attenuated
+    coefficient returns multiplied by ``1 / |H|`` -- and so does the noise
+    riding on it, which is why a notch yields grain instead of detail.  The
+    Wiener filter asks a different question: which multiplier minimises
+    ``E|F_est - F|^2`` for each coefficient?  For white noise of power ``N0``
+    and a locally white signal of power ``S0``, uncorrelated with the noise,
+    the answer is
+
+    .. math:: \\hat{F}(u,v) = \\frac{H^{*}(u,v)}
+              {|H(u,v)|^{2} + K} \\, G(u,v), \\qquad K = N_0 / S_0 ,
+
+    which is the inverse filter's quotient ``G / H`` multiplied by the real,
+    frequency-dependent taper
+
+    .. math:: T(u,v) = \\frac{|H(u,v)|^{2}}{|H(u,v)|^{2} + K}
+              \\in [0, 1) .
+
+    Each factor earns its place:
+
+    * ``H^{*}`` carries the blur's phase back to ``-arg H``, so the estimate is
+      neither shifted nor echoed -- the same correction the inverse filter
+      makes, in conjugate form -- and it keeps one factor of ``|H|`` in the
+      numerator, so the passband is passed at gain ~1 instead of being
+      divided by ``|H|`` twice.
+    * ``|H|^{2}`` is the power the blur applied at that frequency.  The
+      denominator adds ``K`` to it, so it is at least ``K`` whenever
+      ``K > 0``: no floor of the :func:`safe_divide` kind is needed, and none
+      is applied, because a floor would change the equation being solved.
+    * ``K`` is the only knob: the noise-to-signal *power* ratio.  Where the
+      blur passed the signal (``|H|^{2} >> K``) the taper is ~1 and the filter
+      inverts; where the blur annihilated it (``|H|^{2} << K``) the taper is
+      ~0 and the filter passes nothing, which is correct -- at a true null
+      there is no signal left to recover, only noise to amplify.
+    * ``K = 0`` reproduces the inverse filter of step 4.2, and ``K`` large
+      enough returns a black image; every value in between trades detail for
+      silence.
+
+    Exact recipe, in this order (nothing is implicit):
+
+    1. the image is validated as grayscale ``float32`` in ``[0, 1]``;
+    2. ``K`` is taken from ``K=``, or derived from ``bsnr_db=`` by
+       :func:`wiener_k_from_bsnr`; exactly one of the two must be given and
+       neither is defaulted, because the regularisation constant is a property
+       of the noise, not of the library;
+    3. ``H`` is built by :func:`psf_frequency_response` on the image's own
+       grid with ``centre="auto"`` (no stored kernel is resized, renormalised
+       or regenerated);
+    4. the border is faded by :func:`taper_edges` -- or left alone for
+       ``profile="none"``, which is the default;
+    5. ``G = fft2(windowed_image)`` and ``F_est = conj(H) G / (|H|^2 + K)``,
+       one vectorised division that keeps every complex value;
+    6. ``real(ifft2(F_est))`` -- for a real image and a real kernel the dropped
+       imaginary part is round-off;
+    7. ``clip_unit_interval``: back into ``[0, 1]`` and ``float32``.
+
+    At an **exact** zero of ``H`` with ``K > 0`` the quotient is ``0 / K = 0``,
+    which is the gain's limit ``|H| / (|H|^2 + K) -> 0`` as ``|H| -> 0``: the
+    formula protects itself and no floor is applied.
+
+    With ``K = 0`` that same coefficient is ``0 / 0``, and its limit is **not**
+    zero -- ``|H| / |H|^2 = 1 / |H|`` diverges, which is exactly the inverse
+    filter's ill-conditioning.  Returning zero there is therefore a **stated
+    convention**, not a limit: a frequency the blur destroyed is given zero
+    gain instead of being filled with amplified round-off.  The convention is
+    written into the division (``where=denominator > 0``), not applied to the
+    result afterwards, and nothing non-finite is ever swapped for a finite
+    value: :func:`clip_unit_interval` still raises if one reaches it.
+
+    Parameters
+    ----------
+    image:
+        The degraded plate, ``(rows, cols)`` in ``[0, 1]``, validated by
+        :func:`validate_image` and not modified.
+    psf:
+        The kernel that produced ``image``, consumed **as-is** (the stored
+        ``<key>_psf``) and validated by :func:`validate_psf`.
+    K:
+        Regularisation constant: the noise-to-signal power ratio, finite and
+        ``>= 0``.  ``K = 0`` is the inverse filter of step 4.2.  Mutually
+        exclusive with ``bsnr_db``.
+    bsnr_db:
+        Target BSNR in decibels, the level ``degradation.add_noise`` was
+        asked for; converted to ``K = rho / (1 + rho)`` by
+        :func:`wiener_k_from_bsnr`.  Mutually exclusive with ``K``.
+    width, fraction, profile:
+        Forwarded to :func:`taper_edges`.  The default profile is
+        ``DEFAULT_INVERSE_TAPER`` (``"none"``) for the measured reason in
+        section 12.3: on this dataset the 8 px margin already makes the
+        circular model exact, so a ramp only adds border model error where
+        ``|H|`` is small, and both filters amplify exactly that.
+    centre:
+        ``"auto"`` (default) or ``"pixel"``, forwarded to
+        :func:`psf_frequency_response`; see :func:`psf_centre_offset` for the
+        offset ``"auto"`` compensates.
+    require_odd:
+        Forwarded to :func:`validate_psf`.  ``False`` (default) accepts the
+        even-sided stored kernels.
+    tol:
+        Absolute tolerance on ``sum(psf) == 1``.
+
+    Returns
+    -------
+    np.ndarray
+        ``float32`` estimate of the sharp plate, same shape as ``image``, every
+        value finite and inside ``[0, 1]``.  With a taper it is the estimate of
+        the *windowed* plate, so only the interior plateau is comparable with
+        the reference.
+
+    Raises
+    ------
+    ValueError
+        If neither or both of ``K`` and ``bsnr_db`` are given, ``K`` is not a
+        finite number ``>= 0``, ``bsnr_db`` is not finite, the image breaks the
+        grayscale convention, the kernel fails :func:`validate_psf`, or the
+        taper parameters are inconsistent with the profile.  A diverged
+        quotient is not masked: :func:`clip_unit_interval` raises on a
+        non-finite output.
+
+    Notes
+    -----
+    Limitations, all inherent to the filter:
+
+    * One scalar ``K`` is the flat-spectrum simplification.  A plate's power is
+      concentrated in its glyphs, so the true signal-to-noise ratio varies
+      across the grid and no single ``K`` is optimal everywhere; the value is a
+      compromise, and section 14.3 measures how far the derived one is from
+      the empirical optimum.
+    * It cannot invent detail.  Where the blur destroyed a frequency the taper
+      is ~0, so a stroke the blur erased stays erased -- the gain is that the
+      noise is not amplified there.  On *clean* input the inverse filter is
+      the more accurate of the two while its floor stays out of the way
+      (section 14.3: 3.3e-05 against 4.2e-03 on the 7x7 smear); on a kernel
+      with deep nulls the inverse filter has to choose a floor it cannot
+      see, and the same table puts Wiener ahead (1.47e-01 against the best
+      floor's 1.83e-01 on the 51x51 smear).  On noisy input it wins outright.
+    * Clipping is lossy: saturated pixels hide how far the quotient overshot,
+      so report ``K`` (or the BSNR it came from) alongside any restored image.
+    * The estimate cannot be better than the model: ``H`` must belong to the
+      image, so the ``_psf`` stored beside a factor-2 image is the only correct
+      kernel for it.
+
+    Examples
+    --------
+    >>> import numpy as np
+    >>> image = np.full((16, 16), 0.5, dtype=np.float32)
+    >>> delta = np.array([[1.0]], dtype=np.float32)
+    >>> np.allclose(wiener_filter(image, delta, K=0.0), image, atol=1e-6)
+    True
+    """
+    degraded = validate_image(image, name="image")
+    if K is None and bsnr_db is None:
+        raise ValueError(
+            "wiener_filter needs a regularisation constant: pass K=... "
+            "(the noise-to-signal power ratio) or bsnr_db=... to derive it"
+        )
+    if K is not None and bsnr_db is not None:
+        raise ValueError(
+            "pass either K=... or bsnr_db=..., not both: K is the "
+            "regularisation constant and bsnr_db is converted into it"
+        )
+    constant = (wiener_k_from_bsnr(bsnr_db) if bsnr_db is not None
+                else _finite_scalar(K, "K", minimum=0.0))
+
+    response = psf_frequency_response(psf, degraded.shape, tol=tol,
+                                      require_odd=require_odd, centre=centre)
+    windowed = taper_edges(degraded, width=width, fraction=fraction,
+                           profile=profile)
+    spectrum = np.fft.fft2(windowed.astype(np.float64))
+
+    # conj(H) * G / (|H|^2 + K): one division, deliberately no flooring.  For
+    # K > 0 the denominator is >= K, so it is never zero.  The ``where``
+    # clause only has work to do for K == 0 at an exact null of H: 0 / 0 is
+    # defined there as zero gain (see the docstring), never a division by zero.
+    denominator = np.abs(response) ** 2 + constant
+    estimate = np.divide(np.conj(response) * spectrum, denominator,
+                         out=np.zeros_like(spectrum), where=denominator > 0)
+    restored = np.real(np.fft.ifft2(estimate))
+    return clip_unit_interval(restored, name="restored image")
+
+
+# --------------------------------------------------------------------------- #
 # Manual check: python -m license_plate_restoration.restoration
 # --------------------------------------------------------------------------- #
 def _demo() -> None:  # pragma: no cover
@@ -1272,6 +1610,56 @@ def _demo() -> None:  # pragma: no cover
         drift = centroid(estimate) - centroid(reference)
         print(f"  centre={mode:>5} centroid drift {drift:+.4f} px   "
               f"rmse {rmse(estimate, reference):.3f}")
+
+    # Wiener filtering: same plate, same samples, one left knob.  The two
+    # kernels are the smallest and the largest this project's grid builds, and
+    # the two noise levels are the two hardest of ``degradation.BSNR_LEVELS``.
+    print()
+    constants = (1e-4, 1e-3, 1e-2, 1e-1)
+    header = " ".join("{:>9}".format("K=" + format(k, ".0e"))
+                      for k in constants)
+    print(f"{'kernel':>7} {'case':>6} {'degraded':>9} {'inverse':>9} "
+          f"{header} {'bsnr K':>9}")
+    for length, radius in ((3, 0), (21, 4)):
+        kernel = combine_psfs(make_motion_psf(length, 8.0),
+                              make_defocus_psf(radius))
+        blurred = blur_fft(plate, kernel)
+        energy = float(np.sum(np.asarray(kernel, np.float64) ** 2))
+        passband = float(np.var(blurred.astype(np.float64))
+                         / np.var(plate.astype(np.float64)))
+        print(f"power {str(kernel.shape):>7}: sum h^2 = {energy:.4f}, "
+              f"var(h*f)/var(f) = {passband:.3f}  (white would be equal)")
+        for label, degraded, bsnr in (
+                ("clean", blurred, None),
+                ("30 dB", add_noise(blurred, 30.0, seed=3), 30.0),
+                ("20 dB", add_noise(blurred, 20.0, seed=3), 20.0)):
+            cells = [f"{rmse(degraded, plate):>9.3e}",
+                     f"{rmse(inverse_filter(degraded, kernel), plate):>9.3e}"]
+            for constant in constants:
+                error = rmse(wiener_filter(degraded, kernel, K=constant), plate)
+                cells.append(f"{error:>9.3e}")
+            if bsnr is None:
+                cells.append(f"{'-':>9}")
+            else:
+                derived = wiener_k_from_bsnr(bsnr)
+                error = rmse(wiener_filter(degraded, kernel, K=derived), plate)
+                cells.append(f"{error:>9.3e}")
+            print(f"{str(kernel.shape):>7} {label:>6} " + " ".join(cells))
+        for label, degraded, bsnr in (
+                ("clean", blurred, None),
+                ("30 dB", add_noise(blurred, 30.0, seed=3), 30.0),
+                ("20 dB", add_noise(blurred, 20.0, seed=3), 20.0)):
+            sweep = " ".join(
+                f"{constant:g}:{rmse(wiener_filter(degraded, kernel,
+                                                  K=constant), plate):.3e}"
+                for constant in (1e-6, 1e-5, 1e-4, 1e-3, 1e-2, 3e-2, 1e-1,
+                                 1.0))
+            if bsnr is None:
+                derived = "n/a"
+            else:
+                derived = f"{wiener_k_from_bsnr(bsnr):.3e}"
+            print(f"K sweep {str(kernel.shape):>7} {label:>6} "
+                  f"(bsnr K {derived}) -> {sweep}")
 
 
 if __name__ == "__main__":  # pragma: no cover

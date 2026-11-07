@@ -1,18 +1,22 @@
-# Step 4 — Restoration: the foundation (4.1) and inverse filtering (4.2)
+# Step 4 — Restoration: the foundation (4.1), inverse filtering (4.2), Wiener filtering (4.3)
 
 **Owner:** Ashish (2026909001) — steps 4 and 8
 **Module:** `license_plate_restoration/restoration.py`
 **Tests:** `tests/test_restoration.py` (foundation, 66),
 `tests/test_restoration_audit.py` (phase 4.1.1 audit, 58),
-`tests/test_inverse_filter.py` (phase 4.2, 39)
+`tests/test_inverse_filter.py` (phase 4.2, 39),
+`tests/test_wiener_filter.py` (phase 4.3, 53)
 **Phase 4.1.1:** complex-valued arithmetic (§6.1), even-sided kernels (§3.4,
 §8.2), edge-tapering measurements (§4, §5.4). The audit log in §11 records what
 changed and what did not.
 **Phase 4.2:** `inverse_filter`, the frequency-domain inverse filter (§12), with
 the taper and floor measurements that decided its defaults (§12.3) and the log
 in §13.
-**Not implemented here:** Wiener, constrained least squares (CLS) and
-Richardson–Lucy. They are steps 4.3–4.5 and they sit on exactly the same four
+**Phase 4.3:** `wiener_filter` and the BSNR → $K$ conversion (§14), with the
+measured three-way comparison against the degraded image and the inverse
+filter on two kernels and three noise levels (§14.3) and the log in §15.
+**Not implemented here:** constrained least squares (CLS) and
+Richardson–Lucy. They are steps 4.4–4.5 and they sit on exactly the same four
 helpers (§7).
 
 This document is written so it can be presented directly in the viva: every
@@ -667,14 +671,16 @@ as-is". Therefore:
 `python -m pytest tests/test_restoration.py -q` → **66 passed**.
 `python -m pytest tests/test_restoration_audit.py -q` → **58 passed**.
 `python -m pytest tests/test_inverse_filter.py -q` → **39 passed**.
-`python -m pytest -q` (whole suite) → **262 passed, 6 skipped** (the 6 skips are
+`python -m pytest tests/test_wiener_filter.py -q` → **53 passed**.
+`python -m pytest -q` (whole suite) → **315 passed, 6 skipped** (the 6 skips are
 the CCPD tests that need the external `CCPD2019/` folder). Before the phase
-4.1.1 audit the suite gave 165 passed / 6 skipped, and before phase 4.2 it gave
-218 / 6; **no existing test was removed, relaxed or skipped** to make room for
-the new ones. The two new helper tests in the audit file exist because phase
-4.2 used an infinite floor and an already-accepted infinite `eps` turned the
-quotient into `inf * phase` — the fix is in `_floor_value`, shared by
-`safe_divide` and `near_zero_mask`, so the two can no longer disagree.
+4.1.1 audit the suite gave 165 passed / 6 skipped, before phase 4.2 it gave
+218 / 6, and before phase 4.3 it gave 262 / 6; **no existing test was removed,
+relaxed or skipped** to make room for the new ones. The two new helper tests in
+the audit file exist because phase 4.2 used an infinite floor and an
+already-accepted infinite `eps` turned the quotient into `inf * phase` — the
+fix is in `_floor_value`, shared by `safe_divide` and `near_zero_mask`, so the
+two can no longer disagree.
 
 What the tests actually demonstrate, beyond "it runs":
 
@@ -726,12 +732,33 @@ And phase 4.2's claims, all in `tests/test_inverse_filter.py` unless marked
 | the taper only moves the border | `test_taper_choice_only_changes_the_border` |
 | bad images, kernels and parameters raise | `test_inverse_filter_rejects_invalid_input` |
 
+And phase 4.3's claims, all in `tests/test_wiener_filter.py`:
+
+| Claim | Test |
+|---|---|
+| $H\equiv1$ with $K=0$ is an exact identity; the passband gain is $1/(1+K)$ | `test_delta_psf_with_zero_k_is_the_identity`, `test_delta_psf_scales_the_passband_by_one_over_one_plus_k` |
+| the filter is the inverse filter times $T=|H|^2/(|H|^2+K)$ | `test_estimate_is_the_inverse_filter_times_the_wiener_taper` |
+| a noise-free blur comes back to $4.7\times10^{-6}$ | `test_noise_free_blur_is_recovered_by_a_tiny_k` |
+| $K=0$ reproduces step 4.2 to one float32 ULP | `test_tiny_k_agrees_with_the_inverse_filter_and_with_the_formula`, `test_zero_k_is_the_inverse_filter_of_step_4_2` |
+| at 20 dB it beats both the degraded image and the inverse filter | `test_wiener_beats_both_the_degraded_image_and_the_inverse_filter` |
+| $0/0$ at an exact null returns zero gain, never NaN | `test_zero_k_at_an_exact_null_is_zero_gain_not_a_division` |
+| an even kernel still needs `centre="auto"` ($6.5\times10^{-7}$ against $2.8\times10^{-2}$) | `test_even_sized_psf_is_restored_without_a_half_pixel_shift` |
+| the stored factor-2 pair stays aligned ($0.006$ px against $0.151$) | `test_even_stored_kernel_keeps_the_decimated_plate_aligned` |
+| dropping $H^*$ costs a factor 33 | `test_complex_frequency_response_keeps_the_conjugate` |
+| larger $K$ lowers contrast monotonically; huge $K$ goes black | `test_larger_k_lowers_the_output_contrast`, `test_large_k_returns_an_almost_black_image` |
+| $K=\rho/(1+\rho)$ matches the realised noise ratio to 0.3 % | `test_bsnr_conversion_matches_the_realised_noise_ratio` |
+| `bsnr_db=` is exactly sugar for the equivalent `K=` | `test_bsnr_argument_is_exactly_the_equivalent_k_argument` |
+| the output is a finite `float32` image in $[0,1]$, both taper arms | `test_property_output_is_always_a_valid_image`, `test_output_keeps_the_image_convention` |
+| bad parameters, images and kernels raise | `test_wiener_rejects_invalid_regularisation`, `test_wiener_rejects_invalid_input` |
+
 `python -m license_plate_restoration.restoration` prints the demo numbers
-quoted in §3.3, §3.4, §5.4, §6.1, §12.3 and §12.5 on a real rendered plate —
-the DC gain, the $|H|$ minimum, the agreement with `blur_fft`, the parity/offset
-table, the complex-quotient check, the four-window table, the inverse-filter
-table (kernel × noise × taper × floor), the floor sweep that locates the
-20 dB optimum, and the factor-2 centroid drift.
+quoted in §3.3, §3.4, §5.4, §6.1, §12.3, §12.5 and §14.3 on a real rendered
+plate — the DC gain, the $|H|$ minimum, the agreement with `blur_fft`, the
+parity/offset table, the complex-quotient check, the four-window table, the
+inverse-filter table (kernel × noise × taper × floor), the floor sweep that
+locates the 20 dB optimum, the factor-2 centroid drift, the Wiener table
+(kernel × noise × four explicit $K$ values plus the BSNR-derived one) and the
+$K$ sweeps that locate the empirical optimum.
 
 ---
 
@@ -874,6 +901,73 @@ Half. `length=15` builds a 31×31 kernel, i.e. a 31 px smear; the grid maximum
 `length=21` is 43 px. Verified against the implementation and pinned by the
 step-2 tests — see §8.1.
 
+**Q: What does the Wiener filter actually divide by?**
+Nothing different in kind: it is still one multiplier per coefficient, but the
+multiplier is $H^*/(|H|^2+K)$ instead of $1/H$. The two are related by the real
+taper $T=|H|^2/(|H|^2+K)$, so the Wiener filter *is* the inverse filter with a
+frequency-dependent shutter: open where the blur passed the signal, closed
+where it did not (§14.2).
+
+**Q: How does that stop the noise amplification?**
+Because the shutter multiplies the noise too. The inverse filter's gain is
+$1/|H|$, so noise power is magnified by $1/|H|^2$ — at the 7×7 kernel's
+smallest $|H|=2.07\times10^{-6}$ that is $+114$ dB, and $+179$ dB for the
+51×51 kernel ($|H|_{\min}=1.13\times10^{-9}$). With $K>0$ the gain is capped at
+$|H|/(|H|^2+K)\le 1/(2\sqrt K)$, i.e. an *amplitude* ceiling the caller sets
+(§14.5).
+
+**Q: What is $K$, precisely?**
+The noise-to-signal **power** ratio, $K=\sigma^2/S$, a dimensionless number,
+never a decibel value. It is also the reciprocal of the signal-to-noise ratio
+of a coefficient the blur passed undiminished, so $K=10^{-2}$ says "this
+coefficient carries 20 dB of noise against its signal". Where $|H|^2=K$ the
+shutter is exactly $\tfrac12$: that is the crossover frequency.
+
+**Q: How do you get $K$ from the BSNR the degradation grid stores?**
+Take the repository's own definition (§14.4). `degradation.noise_sigma` sets
+$\sigma=\sqrt{\operatorname{var}(h*f)/10^{\mathrm{BSNR}/10}}$, so the BSNR is a
+power ratio in dB against the **blurred** signal. Writing
+$\rho=10^{-\mathrm{BSNR}/10}$, the observation gives
+$\operatorname{var}(g)=\operatorname{var}(h*f)(1+\rho)$, hence
+$K=\sigma^2/\operatorname{var}(g)=\rho/(1+\rho)$. That is 9.999e-5 at 40 dB,
+9.990e-4 at 30 dB and 9.901e-3 at 20 dB, and it matches the noise ratio read
+off an actual `add_noise` output to 0.3 % (`test_bsnr_conversion_matches_the_realised_noise_ratio`).
+
+**Q: Is that just $1/$BSNR?**
+Almost, and only because of this convention. $K=\rho$ is the small-noise limit:
+the two agree to 1 % at every level in `BSNR_LEVELS` and differ by a factor 2
+at 0 dB. If the BSNR had been defined against the *sharp* plate instead, the
+factor would be $\operatorname{var}(h*f)/\operatorname{var}(f)$, i.e. 0.771
+for the 7×7 kernel — a 23 % error, not 1 %. The measured, PSF-dependent version
+of that idea ($K=\rho\sum h^2$) is a negative result: it restores 1.9–2.9×
+worse at 20–30 dB (§14.4).
+
+**Q: Why is $K=0$ the inverse filter?**
+The shutter becomes $|H|^2/|H|^2=1$, so nothing is suppressed and the filter is
+$H^*G/|H|^2=G/H$ — step 4.2, reached by a different route. Measured: the two
+agree to $1.8\times10^{-7}$, one float32 ULP at 0.5. The one coefficient where
+it is *not* the same is an exact null, where $0/0$ is undefined and the code
+returns zero gain by convention (§14.5).
+
+**Q: Does Wiener filtering always improve the result?**
+No, and the honest answer is in the table. On clean input with a benign kernel
+the inverse filter is 130× more accurate ($3.3\times10^{-5}$ against
+$4.2\times10^{-3}$); over-regularising clean input makes Wiener *worse than the
+blur* ($1.165\times10^{-1}$ against $1.106\times10^{-1}$); and on the 7×7 kernel
+at 20 dB it removes only 22 % of the blur's error, because the remainder is the
+band the blur destroyed, not noise. It does win decisively where the inverse
+filter cannot choose a floor without the ground truth — 12× better at 30 dB and
+7.8× at 20 dB on the 7×7 kernel, and on the clean 51×51 kernel
+$1.466\times10^{-1}$ against the best floor's $1.831\times10^{-1}$ (§14.3, §14.6).
+
+**Q: Why can it still lose the fine character detail?**
+Because the shutter closes exactly where fine detail lives. A stroke edge of
+width $w$ carries its energy at spatial frequencies around $1/w$; a 43 px smear
+nulls a band of spacings around 1/43 cycles/px, and $T\approx0$ there means
+the band is *omitted*, not recovered. The filter's contract is minimum mean
+square error, not minimum error on the strokes — and the square error prefers a
+slightly blurred stroke to a noisy one (§14.6).
+
 ---
 
 ## 11. Audit log (phase 4.1.1)
@@ -913,8 +1007,9 @@ it. Each is answered above; this table is the index, and it records what was
   `psf_builder` and false of the stored factor-2 kernels (§8.2). That file is
   teammate-owned and was not edited; the discrepancy is reported here instead.
 
-`python -m pytest -q` → **218 passed, 6 skipped** at the end of the audit, and
-**262 passed, 6 skipped** after step 4.2 (§13).
+`python -m pytest -q` → **218 passed, 6 skipped** at the end of the audit,
+**262 passed, 6 skipped** after step 4.2 (§13), and **315 passed, 6 skipped**
+after step 4.3 (§15).
 
 ---
 
@@ -1218,8 +1313,10 @@ sturdier signature there than the centroid. Two tests pin it:
    forward model here is the same step-2.2 code applied to `plates.npz`.
 8. **Two kernels, one plate, one seed per condition.** Enough to pin the
    defaults and demonstrate the mechanism; not a survey. Step 8 runs the grid.
-9. **Wiener, CLS and Richardson–Lucy are not implemented.** They are steps
-   4.3–4.5 and they need nothing that this phase did not build (§7).
+9. **This section is the inverse filter only.** Wiener is implemented in §14
+   and CLS and Richardson–Lucy are steps 4.4–4.5; none of them needs anything
+   that this phase did not build (§7). The limitations above are properties of
+   $1/H$, not of restoration in general.
 
 ---
 
@@ -1256,7 +1353,402 @@ or deleted to accommodate this phase). The inverse-filter module alone gives
 of `SyntaxWarning` (`python -W error::SyntaxWarning`), which matters because the
 docstrings carry LaTeX.
 
-**Next.** Step 4.3 (Wiener) replaces the flat floor by
-$|H|^2/(|H|^2 + K)$ and uses the same `psf_frequency_response`,
-`taper_edges`, `safe_divide` and `clip_unit_interval`; the `K` it needs is the
-inverse of the BSNR the degradation grid already stores.
+**Next.** Step 4.3 (Wiener) replaced the flat floor by the shutter
+$|H|^2/(|H|^2+K)$ predicted here, and *not* by a kernel-dependent $K$: §14.4
+derives $K=\rho/(1+\rho)$ straight from `degradation.noise_sigma` and measures
+the PSF-aware alternative as a negative result. Steps 4.4 (CLS) and 4.5
+(Richardson–Lucy) reuse `psf_frequency_response`, `taper_edges` and
+`clip_unit_interval` unchanged, and will be scored by step 8's runner, not by a
+metric written here.
+
+---
+
+## 14. Wiener filtering (step 4.3)
+
+The implementation is `wiener_filter` plus `wiener_k_from_bsnr` in
+`license_plate_restoration/restoration.py`. Its defaults are the same as step
+4.2's for the same measured reason: `profile="none"`, `centre="auto"`,
+`require_odd=False`, stored kernels consumed as-is. What is new is a single
+scalar, $K$, and a documented way to derive it.
+
+### 14.1 What inverse filtering does to the noise
+
+Adding the noise to the model of §1 and dividing:
+
+$$
+\hat F(u,v) \;=\; \frac{G(u,v)}{H(u,v)}
+                \;=\; F(u,v) \;+\; \frac{N(u,v)}{H(u,v)},
+$$
+
+so the error is the noise multiplied by $1/|H|$, and the noise **power** at that
+coefficient by $1/|H|^2$. Nothing distinguishes signal from noise: a
+coefficient carrying 20 dB of noise against its signal is amplified exactly as
+much as one carrying none. Measured end to end at 20 dB BSNR (§14.3): the
+blurred plate is $1.148\times10^{-1}$ RMS from the reference and the inverse
+filter is $7.005\times10^{-1}$ — **6.1× worse than doing nothing**.
+
+The two kernels used below bracket the mechanism. $|H|_{\min}$ is
+$2.07\times10^{-6}$ for the 7×7 smear and $1.13\times10^{-9}$ for the 51×51
+one, i.e. amplitude gains of $4.8\times10^{5}$ and $8.9\times10^{8}$, or
+$+114$ dB and $+179$ dB in power, at the frequency the blur destroyed.
+
+The floor of §12.2 caps that gain, but it caps it for *every* coefficient at
+once and without knowing where the noise is. The Wiener filter asks a sharper
+question: which multiplier minimises the mean square error *of this
+coefficient*?
+
+### 14.2 Derivation: the multiplier that minimises the mean square error
+
+Drop $(u,v)$ and consider one coefficient. The model is
+
+$$
+G = HF + N, \qquad E|F|^2 = S, \qquad E|N|^2 = N_0, \qquad E[F^*N] = 0,
+$$
+
+where $S$ and $N_0$ are the signal and noise power at that frequency — the
+locally-white model of both. We want the multiplier $W$ that minimises
+
+$$
+J(W) \;=\; E|\hat F - F|^2 \;=\; E\left|W(HF+N) - F\right|^2 .
+$$
+
+Because $F$ and $N$ are uncorrelated and zero-mean, the cross terms vanish:
+
+$$
+J(W) \;=\; |WH-1|^2\,S \;+\; |W|^2 N_0 .
+$$
+
+Setting $\partial J/\partial W^* = 0$:
+
+$$
+H^*(WH-1)\,S + W N_0 = 0
+\;\Longrightarrow\;
+W\left(|H|^2 S + N_0\right) = H^* S
+\;\Longrightarrow\;
+W = \frac{H^*}{|H|^2 + N_0/S} .
+$$
+
+With $K = N_0/S$ this is exactly what the code evaluates:
+
+$$
+\hat F \;=\; \frac{H^*}{|H|^2 + K}\,G
+\;=\; \underbrace{\frac{|H|^2}{|H|^2+K}}_{T\,\in\,[0,\,1)}
+      \;\cdot\; \underbrace{\frac{G}{H}}_{\text{step 4.2}} .
+$$
+
+Each factor earns its place:
+
+* **$H^*$** carries the blur's phase back to $-\arg H$, so the estimate is
+  neither shifted nor echoed, and it keeps *one* factor of $|H|$ in the
+  numerator. That is what makes the passband gain
+  $|H|^2/(|H|^2+K)\approx1$ instead of the inverse filter's $1/|H|$: numerator
+  and denominator are scaled alike. Dropping it is catastrophic, not subtle —
+  on a genuinely complex response the error is $4.8\times10^{-1}$ against
+  $1.4\times10^{-2}$ (`test_complex_frequency_response_keeps_the_conjugate`).
+* **$|H|^2$** is the blur's power transmittance at that frequency. It is what
+  $K$ is compared against, so $|H|^2/K$ *is* that coefficient's
+  signal-to-noise ratio, and $|H|^2 = K$ is the crossover, where the shutter is
+  exactly $\tfrac12$.
+* **$K$** is the only unknown, and the only knob. It sets a ceiling on the
+  amplitude gain, $\max_{|H|}|H|/(|H|^2+K) = 1/(2\sqrt K)$ — $K=10^{-2}$ allows
+  a factor 5, $K=10^{-4}$ a factor 50 — and §14.4 derives it from the BSNR
+  the degradation grid stores.
+
+The identity at the right-hand end is pinned as a test
+(`test_estimate_is_the_inverse_filter_times_the_wiener_taper`): the Wiener
+filter **is** the inverse filter of step 4.2 multiplied by a real,
+frequency-dependent shutter in $[0,1)$, open where the blur passed the signal
+and closed where it annihilated it.
+
+### 14.3 Measured: degraded vs inverse vs Wiener on identical samples
+
+Plate `generate_plates(1, seed=7)`, noise `add_noise(..., seed=3)`, error =
+interior RMSE against $f$ over a 12 px margin, printed by
+`python -m license_plate_restoration.restoration`. **7×7** = motion `length=3`
+at 8° with no defocus ($\sum h^2 = 0.1089$); **51×51** = motion `length=21` at
+8° with defocus radius 4 ($\sum h^2 = 0.0029$). Every row is the *same*
+sample of the same plate.
+
+| kernel | input | degraded | inverse ($\varepsilon=10^{-12}$) | $K=10^{-4}$ | $K=10^{-3}$ | $K=10^{-2}$ | $K=10^{-1}$ | from BSNR |
+|---|---|---|---|---|---|---|---|---|
+| 7×7 | clean | 1.106e-1 | **3.271e-5** | 1.459e-2 | 2.902e-2 | 5.135e-2 | 1.165e-1 | — |
+| 7×7 | 30 dB | 1.110e-1 | 6.985e-1 | 1.767e-1 | 7.689e-2 | **5.689e-2** | 1.189e-1 | 7.692e-2 ($K=9.990$e-4) |
+| 7×7 | 20 dB | 1.148e-1 | 7.005e-1 | 4.410e-1 | 2.205e-1 | 8.954e-2 | 1.264e-1 | 8.973e-2 ($K=9.901$e-3) |
+| 51×51 | clean | 3.164e-1 | 6.994e-1 | **1.466e-1** | 1.690e-1 | 2.304e-1 | 2.990e-1 | — |
+| 51×51 | 30 dB | 3.164e-1 | 7.002e-1 | **1.630e-1** | 1.691e-1 | 2.302e-1 | 2.991e-1 | 1.690e-1 ($K=9.990$e-4) |
+| 51×51 | 20 dB | 3.169e-1 | 7.004e-1 | 2.631e-1 | **1.758e-1** | 2.302e-1 | 2.994e-1 | 2.299e-1 ($K=9.901$e-3) |
+
+The sweeps that locate each optimum (same samples, printed by the demo):
+
+```
+K sweep  (7, 7)  clean (bsnr K n/a) -> 1e-06:4.243e-03 1e-05:7.464e-03 0.0001:1.459e-02 0.001:2.902e-02 0.01:5.135e-02 0.03:6.926e-02 0.1:1.165e-01 1:4.686e-01
+K sweep  (7, 7)  30 dB (bsnr K 9.990e-04) -> 1e-06:4.522e-01 1e-05:3.071e-01 0.0001:1.767e-01 0.001:7.689e-02 0.01:5.689e-02 0.03:7.182e-02 0.1:1.189e-01 1:4.704e-01
+K sweep  (7, 7)  20 dB (bsnr K 9.901e-03) -> 1e-06:6.229e-01 1e-05:5.568e-01 0.0001:4.410e-01 0.001:2.205e-01 0.01:8.954e-02 0.03:8.570e-02 0.1:1.264e-01 1:4.744e-01
+K sweep (51, 51)  clean (bsnr K n/a) -> 1e-06:3.100e-01 1e-05:1.914e-01 0.0001:1.466e-01 0.001:1.690e-01 0.01:2.304e-01 0.03:2.620e-01 0.1:2.990e-01 1:5.356e-01
+K sweep (51, 51)  30 dB (bsnr K 9.990e-04) -> 1e-06:5.840e-01 1e-05:3.382e-01 0.0001:1.630e-01 0.001:1.691e-01 0.01:2.302e-01 0.03:2.620e-01 0.1:2.991e-01 1:5.359e-01
+K sweep (51, 51)  20 dB (bsnr K 9.901e-03) -> 1e-06:6.610e-01 1e-05:5.553e-01 0.0001:2.631e-01 0.001:1.758e-01 0.01:2.302e-01 0.03:2.619e-01 0.1:2.994e-01 1:5.367e-01
+```
+
+Six readings, including the ones that do not flatter the method:
+
+1. **On noisy input it is the win the phase promises.** 7×7 at 30 dB: the
+   inverse filter is $6.985\times10^{-1}$ (6.3× worse than the blur), the
+   derived $K$ gives $7.692\times10^{-2}$ — 9.1× better than the inverse filter
+   and 1.44× better than the blur. At 20 dB the derived $K$ gives
+   $8.973\times10^{-2}$: 7.8× better than the inverse filter, 1.28× better than
+   the blur. On the 51×51 kernel at 20 dB, $2.299\times10^{-1}$ against
+   $7.004\times10^{-1}$: 3.0× better.
+2. **On clean input with a benign kernel the inverse filter still wins, and by
+   two orders of magnitude.** 7×7 clean: $3.271\times10^{-5}$ against Wiener's
+   best $4.243\times10^{-3}$ (at $K=10^{-6}$). With no noise there is nothing to
+   suppress, so the shutter only removes recoverable detail. Wiener's best is
+   still 26× better than the blur, which is the point: it is a
+   *regularised* filter, not a bad one.
+3. **On clean input with an aggressive kernel the ordering reverses, because
+   the inverse filter cannot choose its floor without the reference.** 51×51
+   clean: $\varepsilon=10^{-12}$ gives $6.994\times10^{-1}$, *worse than the
+   blur*; the best floor found in §12.3 ($\varepsilon=10^{-1}$) gives
+   $1.831\times10^{-1}$; Wiener with the *smallest* explicit $K=10^{-4}$ gives
+   $1.466\times10^{-1}$ — 1.25× better than the best floor and 2.16× better
+   than the blur. A single $\varepsilon$ has to be guessed; $K$ has a meaning
+   and therefore a way to be derived.
+4. **Over-regularisation is a real failure mode, not a theoretical one.**
+   7×7 clean at $K=10^{-1}$ gives $1.165\times10^{-1}$ — *worse than not
+   restoring at all* ($1.106\times10^{-1}$), because the shutter has closed on
+   the blur's passband. On 51×51 clean the same $K$ buys only 6 %
+   ($2.990\times10^{-1}$ against $3.164\times10^{-1}$). $K$ must be justified,
+   which is the whole of §14.4.
+5. **The derived $K$ is within 1.04–1.35× of the empirical optimum in RMSE.**
+   Per row: 1.35× (7×7 30 dB), 1.05× (7×7 20 dB), 1.04× (51×51 30 dB), 1.31×
+   (51×51 20 dB). It never beat the swept optimum, and it is derived from the
+   noise level alone, without the reference.
+6. **Its *bias* is not systematic: it flips sign with the kernel.** The derived
+   $K$ is 10× too *small* for the 7×7 kernel (optimum $10^{-2}$ against
+   $9.99\times10^{-4}$) and 10× too *large* for the 51×51 one (optimum
+   $10^{-3}$–$10^{-4}$ against $9.90\times10^{-3}$). The error curve is flat
+   enough near its minimum that both land within 1.35× in RMSE. The reason is
+   visible in the sweeps: the empirical optimum is nearly **independent of the
+   noise level** for a given kernel ($10^{-2}$ at both 30 and 20 dB for 7×7),
+   so it is dominated by how much detail the blur destroyed, not by how much
+   noise was added. A noise-only formula cannot reproduce that, and does not
+   try to.
+
+### 14.4 The regularisation constant from the repository's BSNR
+
+The conversion is derived from the code, not from the name of the quantity.
+`degradation.noise_sigma` defines it once:
+
+```python
+sigma = sqrt(var(img) / 10 ** (bsnr_db / 10))      # img = h * f
+```
+
+so the repository's BSNR is a **power** ratio in decibels ($10\log_{10}$, not
+$20\log_{10}$) against the **blurred** plate:
+
+$$
+\mathrm{BSNR}_{dB} = 10 \log_{10}
+  \frac{\operatorname{var}(h*f)}{\operatorname{var}(n)},
+\qquad
+\rho \;=\; 10^{-\mathrm{BSNR}_{dB}/10}
+\;\Longleftrightarrow\;
+\operatorname{var}(n) = \rho \operatorname{var}(h*f).
+$$
+
+`degradation.measure_bsnr` reports the same quantity as
+$10\log_{10}\left(\frac{\operatorname{var}(\text{clean})}
+{\operatorname{var}(\text{noisy}-\text{clean})}\right)$, and `add_noise`'s
+saturation compensation makes that measurement true of the *clipped* image, so
+the number a caller passes describes the degradation that was actually applied.
+
+$\rho$ is linear and $\le 1$ for every level this project uses ($10^{-4}$ at
+40 dB, $10^{-2}$ at 20 dB). The Wiener denominator, however, wants the ratio to
+the **sharp** signal, and the blur has to be undone somewhere. It drops out of
+the observation model: signal and noise are independent and the noise is
+zero-mean, so
+
+$$
+\operatorname{var}(g) = \operatorname{var}(h*f)
+                      + \operatorname{var}(n)
+                      = \operatorname{var}(h*f)\,(1+\rho).
+$$
+
+Estimating the signal power by the observed power — the only one available at
+restoration time — gives
+
+$$
+K = \frac{\operatorname{var}(n)}{\operatorname{var}(g)}
+  = \frac{\rho\,\operatorname{var}(h*f)}
+         {\operatorname{var}(h*f)(1+\rho)}
+  = \frac{\rho}{1+\rho} .
+$$
+
+Four consequences, the last of which is a negative result:
+
+* **`K = rho / (1 + rho)`, not `K = rho`.** The textbook $1/\mathrm{BSNR}$ is
+  the small-noise limit. They agree to within 1 % at every level in
+  `degradation.BSNR_LEVELS` — so the naive rule is *nearly* right **under this
+  convention** — and differ by a factor 2 at 0 dB. That 1 % is luck, not
+  algebra: had the BSNR been defined against the sharp plate, the factor would
+  be $\operatorname{var}(h*f)/\operatorname{var}(f)$, which is 0.771 for the
+  7×7 kernel, a 23 % error.
+* **Decibels and ratios are never mixed.** `bsnr_db=30` means $\rho=10^{-3}$;
+  passing $30$ where $10^{-3}$ belongs would regularise 30 000× too hard and
+  return a nearly black image (at $K=1$ the 7×7 row reads
+  $4.704\times10^{-1}$, worse than the blur).
+* **No kernel appears.** $\rho$ fixes the noise power and the observation fixes
+  the signal power, so the PSF does not enter the conversion; it enters the
+  filter through $|H|^2$. The same BSNR therefore yields the same $K$ for a
+  7×7 and a 51×51 kernel, which is exactly right for a formula that knows
+  nothing about the kernel.
+* **The PSF-dependent variant was computed, measured and rejected.** Assuming
+  a *white* plate, Parseval gives $\operatorname{mean}(|H|^2) = \sum h^2$ and
+  hence $\operatorname{var}(h*f) = \left(\sum h^2\right)\operatorname{var}(f)$,
+  so $K = \rho \sum h^2$. A plate is not white — its power sits in the low
+  frequencies where $|H|\approx1$ — and the measured ratio
+  $\operatorname{var}(h*f)/\operatorname{var}(f)$ is 0.771 against
+  $\sum h^2 = 0.109$ for 7×7, and 0.277 against 0.003 for 51×51:
+
+| kernel | BSNR | $K=\rho\sum h^2$ | RMSE | $K=\rho/(1+\rho)$ | RMSE |
+|---|---|---|---|---|---|
+| 7×7 | 30 dB | 1.089e-4 | 1.722e-1 | 9.990e-4 | **7.692e-2** |
+| 7×7 | 20 dB | 1.089e-3 | 2.123e-1 | 9.901e-3 | **8.973e-2** |
+| 51×51 | 30 dB | 2.913e-6 | 4.930e-1 | 9.990e-4 | **1.690e-1** |
+| 51×51 | 20 dB | 2.913e-5 | 4.340e-1 | 9.901e-3 | **2.299e-1** |
+
+  The white-plate route is 1.9–2.9× worse in RMSE and lands one to two orders
+  of magnitude below the useful $K$. It is recorded here as a negative result
+  so that the next person does not derive it again.
+
+The conversion is verified against the data, not against itself. On an actual
+`add_noise` output the realised residual gives
+$\sigma^2/\operatorname{var}(g)$ directly, and it matches the formula:
+
+| BSNR | $\rho$ | $K=\rho/(1+\rho)$ | measured $\sigma^2/\operatorname{var}(g)$ | ratio |
+|---|---|---|---|---|
+| 40 dB | 1.000e-4 | 9.999e-5 | 9.996e-5 | 1.0003 |
+| 30 dB | 1.000e-3 | 9.990e-4 | 9.981e-4 | 1.0009 |
+| 25 dB | 3.162e-3 | 3.152e-3 | 3.147e-3 | 1.0016 |
+| 20 dB | 1.000e-2 | 9.901e-3 | 9.874e-3 | 1.0028 |
+
+### 14.5 Numerical behaviour
+
+* **No denominator floor, and none is needed for $K>0$.** The denominator is
+  $|H|^2 + K \ge K > 0$, so the Wiener expression is protected by construction.
+  `safe_divide` is deliberately *not* used: its floor changes the equation, and
+  at $|H|$ just above the floor it would silently substitute a different
+  operator than the one being solved. The shutter already does the job the
+  floor was invented for.
+* **Exact zeros of $H$.** A 2×2 bilinear kernel nulls Nyquist exactly
+  ($|H|_{\min}=0.0$ on 44 coefficients of a 40×40 grid). With $K>0$ the
+  coefficient is $0/K = 0$, which is the gain's limit as well — the formula
+  protects itself. With $K=0$ it is $0/0$, and here the limit is **not** zero:
+  $|H|/|H|^2 = 1/|H|$ *diverges*, which is the inverse filter's
+  ill-conditioning in its purest form. The code returns zero gain there by an
+  explicit convention written into the division (`where=denominator > 0`), and
+  the docstring says so. The measured cost is honest: with $K=0$ the bilinear
+  case restores at $5.2\times10^{-1}$ RMS, against $2.5\times10^{-2}$ at
+  $K=10^{-12}$, because half the spectrum is simply not recoverable.
+* **Nothing non-finite is ever hidden.** No value is replaced after the fact;
+  `clip_unit_interval` still raises if a NaN/inf reaches it, which is why a
+  NaN or inf *image* is rejected by validation rather than smeared into the
+  output.
+* **Complex arithmetic is preserved** end to end (`complex128` spectrum, one
+  vectorised division), and the imaginary part of the inverse FFT is dropped
+  only at the very end, where it is round-off for a real image and a real
+  kernel.
+* **Even-sized kernels still need `centre="auto"`**, and the effect measured
+  through *this* filter is the same as through step 4.2: on the sub-pixel blob
+  $6.5\times10^{-7}$ against $2.8\times10^{-2}$ and $0.0000$ px against
+  $+0.5000$; on the stored factor-2 pair $0.089$ against $0.195$ with a drift
+  of $0.006$ px against $0.151$ px. A phase error is not something a real $K$
+  can fix.
+* **Large and small $K$** behave as the algebra says: output spread falls
+  monotonically with $K$ ($8.5\times10^{-2} \to 1.3\times10^{-2}$ from
+  $K=10^{-4}$ to $1$) and $K=10^{6}$ returns an essentially black image
+  (max $5.6\times10^{-7}$).
+
+### 14.6 Why the fine character detail still goes
+
+The shutter is a **suppression**, not a recovery. A stroke edge of width $w$
+carries its energy around spatial frequency $1/w$; the 43 px smear nulls a band
+of spacings near $1/43$ cycles/px, and there $T\approx0$ — the band is
+*omitted*. The filter's contract is minimum mean square error, and a square
+error prefers a slightly blurred stroke to a noisy one; that is the trade the
+user asked for, and it is not the same as "recover the character".
+
+The numbers show how much of the residual is detail rather than noise. For the
+7×7 kernel at 20 dB the noise's own standard deviation is
+$\sigma=3.31\times10^{-2}$, while the restored error is $8.973\times10^{-2}$ —
+**2.7× $\sigma$**. For the 51×51 kernel at 20 dB, $\sigma=1.98\times10^{-2}$
+against an error of $2.299\times10^{-1}$, **11.6× $\sigma$**. The noise has been
+suppressed to a fraction of $\sigma$; what is left is the band the blur
+destroyed, and no value of $K$ brings it back.
+
+### 14.7 Limitations — say these out loud
+
+1. **One scalar $K$ cannot be optimal at every frequency.** The flat-spectrum
+   model is an average; §14.3 shows the derived value landing 1.04–1.35× from
+   the swept optimum, with the bias flipping sign between kernels.
+2. **It cannot invent detail**, and the error is dominated by the destroyed
+   band at strong blur (§14.6). It is a better *estimate*, not a better
+   *measurement*: no downstream step recovers information the blur removed.
+3. **$K=0$ is not free.** It is the inverse filter, including its
+   ill-conditioning; the only addition is the documented zero-gain convention
+   at exact nulls, whose cost is measured in §14.5.
+4. **The BSNR conversion assumes what `add_noise` guarantees**: white,
+   zero-mean noise whose variance equals the target. A real sensor's noise
+   would have to be measured, not assumed, and the conversion would need that
+   measurement.
+5. **No PSNR or SSIM here.** Step 8 owns the metrics; this phase reports
+   interior RMSE against $f$ only. RMSE and PSNR are monotone in each other at
+   fixed peak, so the *orderings* above do not depend on the choice.
+6. **Clipping is inside the measured error.** The estimate is clipped to
+   $[0,1]$ before scoring, as the image convention requires.
+7. **The border is meaningless under a taper.** All numbers are interior crops;
+   a tapered frame must never be binarised or scored (§5.3).
+8. **Two kernels, one plate, one seed per condition**, from the generative
+   pipeline (`plates.npz` + `blur_fft`), not from the 471 MB `degraded.npz`,
+   which is gitignored and absent from this checkout. Enough to pin the
+   defaults and the conversion; step 8's runner is what turns this into a
+   survey.
+
+---
+
+## 15. Phase 4.3 log
+
+| File | Change | Tests |
+|---|---|---|
+| `license_plate_restoration/restoration.py` | `wiener_filter`, `wiener_k_from_bsnr`, `_finite_scalar` (the numeric gate for $K$ and the BSNR); module docstring; demo extended with the Wiener table, the $K$ sweeps and the $\sum h^2$ vs $\operatorname{var}(h*f)/\operatorname{var}(f)$ line | existing 163 tests across the three suites unchanged |
+| `tests/test_wiener_filter.py` | **new**, 53 tests: the fourteen required categories plus a Hypothesis property | 53 |
+| `docs/restoration_foundation.md` | §9 counts and claims, §10 Wiener Q&As, §14, §15 | — |
+
+**Decisions, and what each cost.**
+
+| Decision | Alternative rejected | Evidence |
+|---|---|---|
+| `K = \rho/(1+\rho)` from `var(g) = var(h*f)(1+\rho)` | $K=\rho$ (naive $1/$BSNR); $K=\rho\sum h^2$ (white plate) | §14.4: agree to 1 % here but a factor 2 at 0 dB; the white-plate route is 1.9–2.9× worse in RMSE |
+| `wiener_k_from_bsnr` takes no PSF | a PSF-aware conversion | the PSF enters only through $|H|^2$; adding it invites the rejected variant above |
+| **exactly one** of `K=` / `bsnr_db=` required, neither defaulted | a default $K$ such as $10^{-3}$ | $K$ is a property of the noise; §14.3 shows a wrong $K$ can be worse than no restoration |
+| default `profile="none"` (shared with step 4.2) | the module default `tukey` | §12.3 measured it; the Wiener arm inherits the same rounding model |
+| **no** denominator floor; `np.divide(..., where=...)` | `safe_divide` with a small $\varepsilon$ | a floor changes the equation; for $K>0$ the denominator is already $\ge K$ |
+| $0/0$ at an exact null with $K=0$ returns zero gain | leaving the NaN, or flooring by $\varepsilon$ | finite output is required and the gain diverges; the convention is stated, not hidden, and its cost is measured (§14.5) |
+| `clip_unit_interval` still raises on non-finite | patching NaN with a plausible value | the spec forbids silent repair; validation rejects a NaN image up front |
+
+**Scope held.** `degradation.py`, `psf_builder.py`, `renderer.py`,
+`ccpd_loader.py`, `binarization.py` and everything under `data/` are
+untouched; `degraded.npz` was not rebuilt; no stored PSF array was modified;
+`DEFAULT_TAPER_PROFILE` still reads `"tukey"` for the rest of the module; no
+public signature changed. `_floor_value` was briefly routed through
+`_finite_scalar` and reverted when the pinned `"eps must be > 0 and finite"`
+message changed — the numeric gate stays private to the Wiener parameters.
+
+**Verification.** `python -m pytest -q` → **315 passed, 6 skipped** (the six
+CCPD tests need the external `CCPD2019/` folder; no test was skipped, relaxed or
+deleted to accommodate this phase). The Wiener module alone gives **53
+passed**; the other module suites give 66, 58 and 39. Module import is free of
+`SyntaxWarning` (`python -W error::SyntaxWarning`), which matters because the
+docstrings carry LaTeX, and the 12 doctests in the module pass.
+
+**Next.** Step 4.4 (CLS) replaces the shutter justification by a smoothness
+prior, $\lambda|C|^2$ in the same denominator position; step 4.5
+(Richardson–Lucy) leaves the frequency domain. Neither is started here.
