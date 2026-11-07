@@ -11,6 +11,10 @@ Two things to keep straight while reading:
   ``bsnr_db`` is the decibel value ``degradation.add_noise`` takes.
 * ``K = 0`` is not a degenerate corner -- it is the inverse filter of step 4.2,
   reached through the Wiener expression instead of ``1 / H``.
+* ``wiener_k_from_bsnr`` returns ``rho / (1 + rho)``, the noise fraction of
+  the *observed* power.  The scalar Wiener model's ``K`` is the noise power
+  over the *sharp* plate's power, ``sigma^2 / var(f)``.  Section 10 pins the
+  difference, and what the clipping in ``add_noise`` does to it.
 """
 
 from __future__ import annotations
@@ -26,6 +30,7 @@ from license_plate_restoration.degradation import (
     blur_fft,
     downsample,
     effective_psf,
+    noise_sigma,
 )
 from license_plate_restoration.psf_builder import (
     combine_psfs,
@@ -263,11 +268,13 @@ def test_wiener_beats_both_the_degraded_image_and_the_inverse_filter() -> None:
 
 
 def test_the_same_noise_admits_no_better_k_by_much() -> None:
-    """The derived K is 1.2x the empirical optimum on this sample.
+    """In RMSE the BSNR-derived K is 1.24x the K = 1e-3 arm on this sample.
 
     Sweep at 20 dB: 1e-3 -> 8.6e-2, 1e-2 -> 1.07e-1, 1e-1 -> 1.3e-1.  The
-    optimum sits below the derived value, which is the flat-spectrum model's
-    known bias (section 14.3 of the docs), not a coding error.
+    optimum sits below the derived value because ``rho / (1 + rho)`` is
+    noise over the *observed* power, and the 5x5 Gaussian removes 92% of the
+    texture's variance: noise over the *sharp* texture is 8.1e-4, not 9.9e-3
+    (section 16 of the docs).  An approximation, not a coding error.
     """
     image = _textured()
     psf = _gaussian(5, 1.0)
@@ -482,13 +489,16 @@ def test_large_k_returns_an_almost_black_image() -> None:
 @pytest.mark.parametrize("bsnr_db", [40.0, 30.0, 25.0, 20.0])
 def test_bsnr_conversion_matches_the_realised_noise_ratio(
         bsnr_db: float) -> None:
-    """K = var(noise) / var(noisy), read off the dataset's own ``add_noise``.
+    """K = var(noise) / var(noisy) on a signal ``add_noise`` never clips.
 
-    The repository's BSNR is defined against the *blurred* signal, so
-    ``var(noisy) = var(blurred)(1 + rho)`` and the sharp-signal ratio is
-    ``rho / (1 + rho)``.  ``add_noise``'s saturation compensation makes the
-    realised residual variance match the target, so the identity is testable:
-    measured agreement 1.0003, 1.0009, 1.0016, 1.0028 over the four levels.
+    The repository's BSNR is defined against the *blurred* signal, so for
+    zero-mean noise independent of it ``var(noisy) = var(blurred)(1 + rho)``
+    and the noise fraction of the observed power is ``rho / (1 + rho)``.
+    That is what the conversion returns -- the observed-power fraction, not
+    noise over the sharp signal.  The texture stays in [0.25, 0.75], so no
+    pixel saturates and the identity holds: formula over measurement 1.0003,
+    1.0009, 1.0016, 1.0028 over the four levels.  A plate does clip, and
+    there it does not hold exactly (next test).
     """
     image = _textured()
     blurred = blur_fft(image, _gaussian(5, 1.0))
@@ -498,6 +508,118 @@ def test_bsnr_conversion_matches_the_realised_noise_ratio(
     measured = float(np.var(residual) / np.var(noisy.astype(np.float64)))
 
     assert wiener_k_from_bsnr(bsnr_db) == pytest.approx(measured, rel=0.01)
+
+
+def test_clipping_breaks_the_variance_split_but_not_the_restoration() -> None:
+    """On a plate the clipped residual is biased; the K it implies is not.
+
+    7x7 kernel, 20 dB, noise seed 3.  ``add_noise`` makes
+    ``var(r) = rho var(h*f)`` hold for the clipped residual ``r = g - h*f``
+    (split over formula 0.9999), but clipping at the white background makes
+    ``r`` negative on average (-7.2e-3) and anticorrelated with the signal,
+    so ``var(g)`` is 0.956 of ``var(h*f) + var(r)`` and the observed noise
+    fraction is 1.046x the formula.  Restoring with that observed fraction
+    instead changes the RMSE by 0.9% -- immaterial next to the K choice.
+    """
+    plate = _plate()
+    psf = combine_psfs(make_motion_psf(3, 8.0), make_defocus_psf(0))
+    blurred = blur_fft(plate, psf)
+    noisy = add_noise(blurred, 20.0, seed=3)
+    signal = blurred.astype(np.float64)
+    observed = noisy.astype(np.float64)
+    residual = observed - signal
+    formula = wiener_k_from_bsnr(20.0)
+
+    split = residual.var() / (signal.var() + residual.var())
+    fraction = residual.var() / observed.var()
+
+    assert split == pytest.approx(formula, rel=2e-3)        # measured 0.9999
+    assert residual.mean() < -1e-3                          # measured -7.2e-3
+    assert observed.var() < 0.98 * (signal.var() + residual.var())  # 0.956
+    assert fraction > 1.02 * formula                        # measured 1.046
+
+    derived = _rmse(plate, wiener_filter(noisy, psf, K=formula), 12)
+    realised = _rmse(plate, wiener_filter(noisy, psf, K=fraction), 12)
+    assert realised == pytest.approx(derived, rel=0.02)     # measured 0.991
+
+
+@pytest.mark.parametrize("length, radius, ratio", [(3, 0, 1.1), (21, 4, 2.0)])
+def test_k_from_bsnr_is_not_the_sharp_signal_ratio(length: int, radius: int,
+                                                   ratio: float) -> None:
+    """On a blurred plate ``rho / (1 + rho)`` exceeds ``sigma^2 / var(f)``.
+
+    The conversion divides the noise by the observed power; the Wiener model
+    divides it by the sharp power.  The blur removes more variance than the
+    noise adds, so the conversion is the larger: measured 1.28x for the 7x7
+    kernel and 3.57x for the 51x51 one at 20 dB, and ``K = rho`` is larger
+    still.  That ratio is an oracle -- it needs ``var(f)`` -- and is
+    computed here, never inside the filter.
+    """
+    plate = _plate()
+    psf = combine_psfs(make_motion_psf(length, 8.0), make_defocus_psf(radius))
+    blurred = blur_fft(plate, psf)
+    sharp_ratio = (noise_sigma(blurred, 20.0) ** 2
+                   / float(np.var(plate.astype(np.float64))))
+
+    assert wiener_k_from_bsnr(20.0) > ratio * sharp_ratio
+    assert 10.0 ** (-20.0 / 10.0) > wiener_k_from_bsnr(20.0)
+
+
+def test_neither_deployable_rule_nor_the_oracle_wins_on_every_kernel() -> None:
+    """The oracle ``sigma^2 / var(f)`` loses on 7x7 and wins on 51x51.
+
+    Same plate, noise seed 3, 20 dB: 9.0e-2 against 9.5e-2 on the 7x7
+    kernel, 2.30e-1 against 1.95e-1 on the 51x51 one.  The flat-spectrum
+    model under-asks for a plate's ``K``; the observed-power substitution
+    over-asks; on the small kernel the two errors cancel.  Ten seeds give the
+    same split (section 16 of the docs).
+    """
+    plate = _plate()
+    errors = []
+    for length, radius in ((3, 0), (21, 4)):
+        psf = combine_psfs(make_motion_psf(length, 8.0),
+                           make_defocus_psf(radius))
+        blurred = blur_fft(plate, psf)
+        noisy = add_noise(blurred, 20.0, seed=3)
+        oracle = (noise_sigma(blurred, 20.0) ** 2
+                  / float(np.var(plate.astype(np.float64))))
+        errors.append((
+            _rmse(plate, wiener_filter(noisy, psf, bsnr_db=20.0), 12),
+            _rmse(plate, wiener_filter(noisy, psf, K=oracle), 12)))
+
+    (small_derived, small_oracle), (large_derived, large_oracle) = errors
+    assert small_derived < small_oracle                     # 0.94x
+    assert large_oracle < 0.9 * large_derived               # 0.85x
+
+
+@pytest.mark.parametrize("bsnr_db", [30.0, 20.0])
+def test_on_a_white_signal_the_sharp_signal_ratio_is_optimal(
+        bsnr_db: float) -> None:
+    """The scalar model's own case: i.i.d. texture, circular blur.
+
+    A flat ``S_f`` makes ``K = sigma^2 / var(f)`` the exact Wiener constant,
+    and Parseval makes it ``rho * sum(h**2)`` (0.926x here, one realisation).
+    It restores within 0.1% of a 41-point sweep's best, while
+    ``rho / (1 + rho)`` is 1.16x (20 dB) and 1.26x (30 dB) worse.
+    """
+    sharp = (0.25 + 0.5 * np.random.default_rng(0).random((64, 64))).astype(
+        np.float32)
+    psf = _gaussian(5, 1.0)
+    blurred = _circular_blur(sharp, psf_frequency_response(psf, sharp.shape))
+    noisy = add_noise(blurred, bsnr_db, seed=4)
+    oracle = (noise_sigma(blurred, bsnr_db) ** 2
+              / float(np.var(sharp.astype(np.float64))))
+    white = 10.0 ** (-bsnr_db / 10.0) * float(
+        np.sum(psf.astype(np.float64) ** 2))
+
+    def error(constant: float) -> float:
+        return _rmse(sharp, wiener_filter(noisy, psf, K=constant))
+
+    best = min(error(constant) for constant in np.logspace(-6, -1, 41))
+
+    assert oracle == pytest.approx(white, rel=0.15)
+    assert error(oracle) < 1.01 * best
+    assert error(wiener_k_from_bsnr(bsnr_db)) > 1.05 * error(oracle)
 
 
 def test_bsnr_argument_is_exactly_the_equivalent_k_argument() -> None:
@@ -515,11 +637,13 @@ def test_bsnr_argument_is_exactly_the_equivalent_k_argument() -> None:
 def test_k_from_bsnr_is_the_linear_ratio_over_one_plus_itself() -> None:
     """The conversion, at the values the project uses and at the limits.
 
-    40 dB -> 9.999e-05, 20 dB -> 9.901e-03, 0 dB -> 0.5, -10 dB -> 0.909.
+    40 dB -> 9.999e-05, 30 dB -> 9.990e-04, 20 dB -> 9.901e-03, 0 dB -> 0.5.
     ``K = rho`` (``1 / BSNR_linear``) would be within 1% of the first two and
-    wrong by 2x at 0 dB, so the exact form is what is implemented.
+    wrong by 2x at 0 dB; the implemented form is the observed-power fraction
+    ``sigma^2 / (var(h*f) + sigma^2)``, exact for any level.
     """
     assert wiener_k_from_bsnr(40.0) == pytest.approx(1e-4 / 1.0001, rel=1e-9)
+    assert wiener_k_from_bsnr(30.0) == pytest.approx(1e-3 / 1.001, rel=1e-9)
     assert wiener_k_from_bsnr(20.0) == pytest.approx(1e-2 / 1.01, rel=1e-9)
     assert wiener_k_from_bsnr(0.0) == pytest.approx(0.5, rel=1e-12)
     assert wiener_k_from_bsnr(-10.0) == pytest.approx(10.0 / 11.0, rel=1e-12)
@@ -527,6 +651,27 @@ def test_k_from_bsnr_is_the_linear_ratio_over_one_plus_itself() -> None:
     levels = [wiener_k_from_bsnr(value) for value in (40.0, 30.0, 25.0, 20.0)]
     assert levels == sorted(levels)                 # more noise -> larger K
     assert all(0.0 <= constant < 1.0 for constant in levels)
+
+
+@pytest.mark.parametrize("bad_input, message", [
+    (float("nan"), "finite number"),
+    (float("inf"), "finite number"),
+    (-float("inf"), "finite number"),
+    ("30", "must be a number"),
+    (None, "must be a number"),
+])
+def test_wiener_k_from_bsnr_rejects_invalid_inputs(bad_input, message: str) -> None:
+    """Invalid BSNR inputs must be rejected with ValueError."""
+    with pytest.raises(ValueError, match=message):
+        wiener_k_from_bsnr(bad_input)
+
+
+@pytest.mark.parametrize("bsnr_db", [50.0, 40.0, 30.0, 25.0, 20.0, 10.0, 0.0, -5.0])
+def test_wiener_k_from_bsnr_matches_analytical_formula(bsnr_db: float) -> None:
+    """wiener_k_from_bsnr(b) must strictly equal rho / (1 + rho) for rho = 10^(-b/10)."""
+    rho = 10.0 ** (-bsnr_db / 10.0)
+    expected = rho / (1.0 + rho)
+    assert wiener_k_from_bsnr(bsnr_db) == pytest.approx(expected, rel=1e-12)
 
 
 # --------------------------------------------------------------------------- #

@@ -5,7 +5,7 @@
 **Tests:** `tests/test_restoration.py` (foundation, 66),
 `tests/test_restoration_audit.py` (phase 4.1.1 audit, 58),
 `tests/test_inverse_filter.py` (phase 4.2, 39),
-`tests/test_wiener_filter.py` (phase 4.3, 53)
+`tests/test_wiener_filter.py` (phase 4.3, 72)
 **Phase 4.1.1:** complex-valued arithmetic (§6.1), even-sided kernels (§3.4,
 §8.2), edge-tapering measurements (§4, §5.4). The audit log in §11 records what
 changed and what did not.
@@ -15,6 +15,8 @@ in §13.
 **Phase 4.3:** `wiener_filter` and the BSNR → $K$ conversion (§14), with the
 measured three-way comparison against the degraded image and the inverse
 filter on two kernels and three noise levels (§14.3) and the log in §15.
+**Phase 4.3.1:** audit of the BSNR → $K$ conversion: mathematical derivation and candidate evaluation (`docs/wiener_mathematical_audit.md`).
+**Phase 4.3.2:** finalisation of Wiener mathematical documentation and regression tests (§16): exact observed-power heuristic documentation, clipping analysis, candidate comparison summary, and BSNR regression tests. §14.2–§14.4 and §14.7 were updated accordingly.
 **Not implemented here:** constrained least squares (CLS) and
 Richardson–Lucy. They are steps 4.4–4.5 and they sit on exactly the same four
 helpers (§7).
@@ -569,7 +571,7 @@ The algorithms differ only in the filter applied to $G = \mathcal{F}\{g_t\}$:
 | Algorithm | Filter | What it needs from the foundation |
 |---|---|---|
 | **Inverse** (§12, implemented) | $\hat F = \dfrac{G}{H}$ | $H$ with no phase offset; an $\varepsilon$ floor, because $H$ has true zeros |
-| **Wiener** | $\hat F = \dfrac{H^{*}}{|H|^{2} + K}\,G$ | $H$ and $H^{*}$ from the same grid; $K \approx$ noise-to-signal ratio $1/\text{BSNR}$ |
+| **Wiener** | $\hat F = \dfrac{H^{*}}{|H|^{2} + K}\,G$ | $H$ and $H^{*}$ from the same grid; $K$ = noise over **sharp**-signal power in the flat-spectrum model, or the observed-power heuristic $\rho/(1+\rho)$ from the BSNR (§14.4, §16) |
 | **CLS** | $\hat F = \dfrac{H^{*}}{|H|^{2} + \lambda\,|C|^{2}}\,G$ | same $H$; $C$ is the DFT of the Laplacian, so the same FFT convention |
 | **Richardson–Lucy** | $f^{t+1} = f^{t}\left(h^{*} * \dfrac{g}{h * f^{t}}\right)$ | $h$ centred (a PSF that shifts would drag the estimate); `safe_divide`; `clip_unit_interval` for the non-negativity constraint |
 
@@ -671,11 +673,12 @@ as-is". Therefore:
 `python -m pytest tests/test_restoration.py -q` → **66 passed**.
 `python -m pytest tests/test_restoration_audit.py -q` → **58 passed**.
 `python -m pytest tests/test_inverse_filter.py -q` → **39 passed**.
-`python -m pytest tests/test_wiener_filter.py -q` → **53 passed**.
-`python -m pytest -q` (whole suite) → **315 passed, 6 skipped** (the 6 skips are
+`python -m pytest tests/test_wiener_filter.py -q` → **72 passed**.
+`python -m pytest -q` (whole suite) → **334 passed, 6 skipped** (the 6 skips are
 the CCPD tests that need the external `CCPD2019/` folder). Before the phase
 4.1.1 audit the suite gave 165 passed / 6 skipped, before phase 4.2 it gave
-218 / 6, and before phase 4.3 it gave 262 / 6; **no existing test was removed,
+218 / 6, before phase 4.3 it gave 262 / 6, before the phase 4.3.1 audit
+it gave 315 / 6, and after phase 4.3.2 it gives 334 / 6; **no existing test was removed,
 relaxed or skipped** to make room for the new ones. The two new helper tests in
 the audit file exist because phase 4.2 used an infinite floor and an
 already-accepted infinite `eps` turned the quotient into `inf * phase` — the
@@ -746,7 +749,11 @@ And phase 4.3's claims, all in `tests/test_wiener_filter.py`:
 | the stored factor-2 pair stays aligned ($0.006$ px against $0.151$) | `test_even_stored_kernel_keeps_the_decimated_plate_aligned` |
 | dropping $H^*$ costs a factor 33 | `test_complex_frequency_response_keeps_the_conjugate` |
 | larger $K$ lowers contrast monotonically; huge $K$ goes black | `test_larger_k_lowers_the_output_contrast`, `test_large_k_returns_an_almost_black_image` |
-| $K=\rho/(1+\rho)$ matches the realised noise ratio to 0.3 % | `test_bsnr_conversion_matches_the_realised_noise_ratio` |
+| $\rho/(1+\rho)$ is the noise fraction of the observed power on a signal that never clips (formula over measurement 1.0003–1.0028) | `test_bsnr_conversion_matches_the_realised_noise_ratio` |
+| on a plate clipping biases the residual ($-7.2\times10^{-3}$) and breaks the variance split (0.956), yet moves the RMSE by under 1 % | `test_clipping_breaks_the_variance_split_but_not_the_restoration` |
+| $\rho/(1+\rho)$ exceeds the sharp-signal ratio $\sigma^2/\operatorname{var}(f)$ on a blurred plate (1.28× and 3.57×) | `test_k_from_bsnr_is_not_the_sharp_signal_ratio` |
+| the oracle $\sigma^2/\operatorname{var}(f)$ loses on 7×7 and wins on 51×51 | `test_neither_deployable_rule_nor_the_oracle_wins_on_every_kernel` |
+| on a white texture $\sigma^2/\operatorname{var}(f)\approx\rho\sum h^2$ is optimal and $\rho/(1+\rho)$ is not | `test_on_a_white_signal_the_sharp_signal_ratio_is_optimal` |
 | `bsnr_db=` is exactly sugar for the equivalent `K=` | `test_bsnr_argument_is_exactly_the_equivalent_k_argument` |
 | the output is a finite `float32` image in $[0,1]$, both taper arms | `test_property_output_is_always_a_valid_image`, `test_output_keeps_the_image_convention` |
 | bad parameters, images and kernels raise | `test_wiener_rejects_invalid_regularisation`, `test_wiener_rejects_invalid_input` |
@@ -757,8 +764,10 @@ plate — the DC gain, the $|H|$ minimum, the agreement with `blur_fft`, the
 parity/offset table, the complex-quotient check, the four-window table, the
 inverse-filter table (kernel × noise × taper × floor), the floor sweep that
 locates the 20 dB optimum, the factor-2 centroid drift, the Wiener table
-(kernel × noise × four explicit $K$ values plus the BSNR-derived one) and the
-$K$ sweeps that locate the empirical optimum.
+(kernel × noise × four explicit $K$ values plus the BSNR-derived one), the
+$K$ sweeps that locate the empirical optimum, and the ten-plate $K$ audit of
+§16 (candidates, oracles, clipping diagnostics, white-texture control, and the
+observed noise fraction per BSNR level).
 
 ---
 
@@ -917,30 +926,44 @@ $|H|/(|H|^2+K)\le 1/(2\sqrt K)$, i.e. an *amplitude* ceiling the caller sets
 (§14.5).
 
 **Q: What is $K$, precisely?**
-The noise-to-signal **power** ratio, $K=\sigma^2/S$, a dimensionless number,
-never a decibel value. It is also the reciprocal of the signal-to-noise ratio
-of a coefficient the blur passed undiminished, so $K=10^{-2}$ says "this
-coefficient carries 20 dB of noise against its signal". Where $|H|^2=K$ the
-shutter is exactly $\tfrac12$: that is the crossover frequency.
+In the scalar Wiener model, the noise power over the **sharp** signal's power,
+$K=S_n/S_f=\sigma^2/\operatorname{var}(f)$ — a dimensionless number, never a
+decibel value, and exact only if both spectra are flat (§14.2). It is also the
+reciprocal of the signal-to-noise ratio of a coefficient the blur passed
+undiminished, so $K=10^{-2}$ says "this coefficient carries 20 dB of noise
+against its signal". Where $|H|^2=K$ the shutter is exactly $\tfrac12$: that
+is the crossover frequency.
 
 **Q: How do you get $K$ from the BSNR the degradation grid stores?**
-Take the repository's own definition (§14.4). `degradation.noise_sigma` sets
+You cannot get the model's $K$ from it — that needs $\operatorname{var}(f)$ —
+so the code uses an observed-power heuristic (§14.4, §16).
+`degradation.noise_sigma` sets
 $\sigma=\sqrt{\operatorname{var}(h*f)/10^{\mathrm{BSNR}/10}}$, so the BSNR is a
-power ratio in dB against the **blurred** signal. Writing
-$\rho=10^{-\mathrm{BSNR}/10}$, the observation gives
-$\operatorname{var}(g)=\operatorname{var}(h*f)(1+\rho)$, hence
-$K=\sigma^2/\operatorname{var}(g)=\rho/(1+\rho)$. That is 9.999e-5 at 40 dB,
-9.990e-4 at 30 dB and 9.901e-3 at 20 dB, and it matches the noise ratio read
-off an actual `add_noise` output to 0.3 % (`test_bsnr_conversion_matches_the_realised_noise_ratio`).
+power ratio in dB against the **blurred** signal: $\rho=10^{-\mathrm{BSNR}/10}=
+\sigma^2/\operatorname{var}(h*f)$. If noise and signal add independently,
+$\operatorname{var}(g)=\operatorname{var}(h*f)(1+\rho)$ and
+$\rho/(1+\rho)=\sigma^2/\operatorname{var}(g)$, the noise fraction of the
+**observed** power. That is 9.999e-5 at 40 dB, 9.990e-4 at 30 dB and 9.901e-3
+at 20 dB. It equals the model's $K$ only if $\operatorname{var}(g)=
+\operatorname{var}(f)$; on a blurred plate it is 1.3× (7×7) to 3.4× (51×51)
+too large.
 
 **Q: Is that just $1/$BSNR?**
-Almost, and only because of this convention. $K=\rho$ is the small-noise limit:
-the two agree to 1 % at every level in `BSNR_LEVELS` and differ by a factor 2
-at 0 dB. If the BSNR had been defined against the *sharp* plate instead, the
-factor would be $\operatorname{var}(h*f)/\operatorname{var}(f)$, i.e. 0.771
-for the 7×7 kernel — a 23 % error, not 1 %. The measured, PSF-dependent version
-of that idea ($K=\rho\sum h^2$) is a negative result: it restores 1.9–2.9×
-worse at 20–30 dB (§14.4).
+Numerically, yes: $K=\rho$ differs from $\rho/(1+\rho)$ only at second order —
+at most 1 % at every level in `BSNR_LEVELS`, 0.2 % in RMSE over ten plates, a
+factor 2 at 0 dB. Neither is noise over the sharp plate. The candidate that
+*is* consistent with the flat model, $K=\rho\sum h^2$, is exactly optimal on a
+white texture but restores 1.9–2.9× worse on plates, because a plate is not
+white (§16).
+
+**Q: Then why keep $\rho/(1+\rho)$?**
+Because, together with $K=\rho$ (which it matches to 0.2 % in RMSE), it is the
+best of the deployable rules on this dataset, and it is only
+1.07–1.43× from the best scalar that the reference could buy (§16). Its
+success on the 7×7 kernel is a cancellation of two errors, not a derivation:
+the flat model under-asks for a plate's $K$, and the observed-power
+substitution over-asks. So `bsnr_db=` stays as a convenience, and every
+controlled experiment passes an explicit `K=` and reports it.
 
 **Q: Why is $K=0$ the inverse filter?**
 The shutter becomes $|H|^2/|H|^2=1$, so nothing is suppressed and the filter is
@@ -1355,8 +1378,9 @@ docstrings carry LaTeX.
 
 **Next.** Step 4.3 (Wiener) replaced the flat floor by the shutter
 $|H|^2/(|H|^2+K)$ predicted here, and *not* by a kernel-dependent $K$: §14.4
-derives $K=\rho/(1+\rho)$ straight from `degradation.noise_sigma` and measures
-the PSF-aware alternative as a negative result. Steps 4.4 (CLS) and 4.5
+converts the BSNR with the observed-power heuristic $\rho/(1+\rho)$ (audited
+in §16, where the PSF-aware white-signal rule is measured and rejected for
+plates). Steps 4.4 (CLS) and 4.5
 (Richardson–Lucy) reuse `psf_frequency_response`, `taper_edges` and
 `clip_unit_interval` unchanged, and will be scored by step 8's runner, not by a
 metric written here.
@@ -1402,39 +1426,67 @@ coefficient*?
 Drop $(u,v)$ and consider one coefficient. The model is
 
 $$
-G = HF + N, \qquad E|F|^2 = S, \qquad E|N|^2 = N_0, \qquad E[F^*N] = 0,
+G = HF + N, \qquad E|F|^2 = S_f, \qquad E|N|^2 = S_n, \qquad E[F N^*] = 0,
 $$
 
-where $S$ and $N_0$ are the signal and noise power at that frequency — the
-locally-white model of both. We want the multiplier $W$ that minimises
+where $S_f(u,v)$ and $S_n(u,v)$ are the signal and noise power spectra at that
+frequency. We want the multiplier $W$ that minimises
 
 $$
 J(W) \;=\; E|\hat F - F|^2 \;=\; E\left|W(HF+N) - F\right|^2 .
 $$
 
-Because $F$ and $N$ are uncorrelated and zero-mean, the cross terms vanish:
+Because $F$ and $N$ are uncorrelated, the cross terms vanish:
 
 $$
-J(W) \;=\; |WH-1|^2\,S \;+\; |W|^2 N_0 .
+J(W) \;=\; |WH-1|^2\,S_f \;+\; |W|^2 S_n .
 $$
 
 Setting $\partial J/\partial W^* = 0$:
 
 $$
-H^*(WH-1)\,S + W N_0 = 0
+H^*(WH-1)\,S_f + W S_n = 0
 \;\Longrightarrow\;
-W\left(|H|^2 S + N_0\right) = H^* S
+W\left(|H|^2 S_f + S_n\right) = H^* S_f
 \;\Longrightarrow\;
-W = \frac{H^*}{|H|^2 + N_0/S} .
+W = \frac{H^* S_f}{|H|^2 S_f + S_n}
+  = \frac{H^*}{|H|^2 + S_n/S_f} .
 $$
 
-With $K = N_0/S$ this is exactly what the code evaluates:
+This is the full Wiener filter: one ratio $S_n/S_f$ **per frequency**. The
+code evaluates the scalar version,
 
 $$
 \hat F \;=\; \frac{H^*}{|H|^2 + K}\,G
 \;=\; \underbrace{\frac{|H|^2}{|H|^2+K}}_{T\,\in\,[0,\,1)}
-      \;\cdot\; \underbrace{\frac{G}{H}}_{\text{step 4.2}} .
+      \;\cdot\; \underbrace{\frac{G}{H}}_{\text{step 4.2}} ,
 $$
+
+which equals the full filter **only if $S_n/S_f$ is the same constant at every
+frequency**. Three assumptions make it so, and each is checkable:
+
+1. **The noise is white**: $S_n = MN\sigma^2$ at every $(u,v)$ (NumPy's
+   unnormalised DFT of an $M\times N$ field of variance $\sigma^2$).
+   `add_noise` draws i.i.d. Gaussian samples, so this holds before clipping.
+2. **The signal spectrum is flat**: $S_f$ is the same at every non-DC
+   frequency. By Parseval its average is $MN\operatorname{var}(f)$, so a flat
+   $S_f$ *is* $MN\operatorname{var}(f)$. A plate violates this badly: its
+   power sits in the low frequencies, where $|H|\approx1$.
+3. **Signal and noise are uncorrelated**, so the cross terms vanish. Clipping in
+   `add_noise` violates this mildly: the realised residual is negative on
+   average and anticorrelated with the signal (§16.4).
+
+Under 1–3 the constant is
+
+$$
+K \;=\; \frac{S_n}{S_f} \;=\; \frac{MN\sigma^2}{MN\operatorname{var}(f)}
+  \;=\; \frac{\sigma^2}{\operatorname{var}(f)} ,
+$$
+
+the noise power over the **sharp** (original) signal's power — not over the
+blurred one, and not over the observed one. (The DC coefficient carries the
+mean, not the variance; $|H(0,0)|=1$ gives it gain $1/(1+K)$, a relative
+brightness loss of $K/(1+K)$, under 1 % for every BSNR-derived $K$.)
 
 Each factor earns its place:
 
@@ -1451,8 +1503,8 @@ Each factor earns its place:
   exactly $\tfrac12$.
 * **$K$** is the only unknown, and the only knob. It sets a ceiling on the
   amplitude gain, $\max_{|H|}|H|/(|H|^2+K) = 1/(2\sqrt K)$ — $K=10^{-2}$ allows
-  a factor 5, $K=10^{-4}$ a factor 50 — and §14.4 derives it from the BSNR
-  the degradation grid stores.
+  a factor 5, $K=10^{-4}$ a factor 50. §14.4 explains what the BSNR the
+  degradation grid stores can and cannot supply for it.
 
 The identity at the right-hand end is pinned as a test
 (`test_estimate_is_the_inverse_filter_times_the_wiener_taper`): the Wiener
@@ -1518,24 +1570,28 @@ Six readings, including the ones that do not flatter the method:
    the blur's passband. On 51×51 clean the same $K$ buys only 6 %
    ($2.990\times10^{-1}$ against $3.164\times10^{-1}$). $K$ must be justified,
    which is the whole of §14.4.
-5. **The derived $K$ is within 1.04–1.35× of the empirical optimum in RMSE.**
-   Per row: 1.35× (7×7 30 dB), 1.05× (7×7 20 dB), 1.04× (51×51 30 dB), 1.31×
-   (51×51 20 dB). It never beat the swept optimum, and it is derived from the
-   noise level alone, without the reference.
-6. **Its *bias* is not systematic: it flips sign with the kernel.** The derived
-   $K$ is 10× too *small* for the 7×7 kernel (optimum $10^{-2}$ against
-   $9.99\times10^{-4}$) and 10× too *large* for the 51×51 one (optimum
-   $10^{-3}$–$10^{-4}$ against $9.90\times10^{-3}$). The error curve is flat
-   enough near its minimum that both land within 1.35× in RMSE. The reason is
-   visible in the sweeps: the empirical optimum is nearly **independent of the
-   noise level** for a given kernel ($10^{-2}$ at both 30 and 20 dB for 7×7),
-   so it is dominated by how much detail the blur destroyed, not by how much
-   noise was added. A noise-only formula cannot reproduce that, and does not
-   try to.
+5. **On this sample the derived $K$ is within 1.04–1.35× of the swept optimum
+   in RMSE.** Per row, against the eight-point sweep: 1.35× (7×7 30 dB), 1.05×
+   (7×7 20 dB, optimum at $3\times10^{-2}$), 1.04× (51×51 30 dB), 1.31×
+   (51×51 20 dB). It never beat the swept optimum, and it is computed from the
+   noise level alone, without the reference. Over ten plates and a 25-point
+   sweep the range is 1.07–1.43× (§16.2).
+6. **Its bias flips sign with the kernel, and the optimum does depend on the
+   noise.** The derived $K$ is too *small* for the 7×7 kernel (sample optimum
+   $10^{-2}$ at 30 dB and $3\times10^{-2}$ at 20 dB, against $9.99\times10^{-4}$
+   and $9.90\times10^{-3}$) and too *large* for the 51×51 one (optimum
+   $10^{-4}$ and $10^{-3}$). The error curve is flat enough near its minimum
+   that both land within 1.35× in RMSE. The kernel dependence is what the
+   model predicts and the conversion cannot see: the model's $K$ is
+   $\sigma^2/\operatorname{var}(f) = \rho\operatorname{var}(h*f)/
+   \operatorname{var}(f)$, which contains the kernel, and the flat-spectrum
+   misfit is itself kernel-dependent (§16.3). The noise dependence is real but
+   sub-linear: over ten plates the optimum grows by about $\sqrt{10}$ (3.2×) for
+   a tenfold rise in $\rho$, on both kernels (§16.2).
 
 ### 14.4 The regularisation constant from the repository's BSNR
 
-The conversion is derived from the code, not from the name of the quantity.
+The BSNR convention is read off the code, not off the name of the quantity.
 `degradation.noise_sigma` defines it once:
 
 ```python
@@ -1547,88 +1603,132 @@ $20\log_{10}$) against the **blurred** plate:
 
 $$
 \mathrm{BSNR}_{dB} = 10 \log_{10}
-  \frac{\operatorname{var}(h*f)}{\operatorname{var}(n)},
+  \frac{\operatorname{var}(h*f)}{\sigma^2},
 \qquad
 \rho \;=\; 10^{-\mathrm{BSNR}_{dB}/10}
 \;\Longleftrightarrow\;
-\operatorname{var}(n) = \rho \operatorname{var}(h*f).
+\sigma^2 = \rho \operatorname{var}(h*f).
 $$
 
 `degradation.measure_bsnr` reports the same quantity as
 $10\log_{10}\left(\frac{\operatorname{var}(\text{clean})}
 {\operatorname{var}(\text{noisy}-\text{clean})}\right)$, and `add_noise`'s
-saturation compensation makes that measurement true of the *clipped* image, so
-the number a caller passes describes the degradation that was actually applied.
+saturation compensation rescales the Gaussian amplitude until that is true of
+the *clipped* residual $r=g-h*f$: $\operatorname{var}(r)=\sigma^2$ to $10^{-3}$
+(measured 0.9993–1.0000 over ten plates, §16.4). It guarantees nothing else:
+$r$ is not zero-mean and not independent of $h*f$, because clipping at the
+white background only ever removes positive excursions.
 
-$\rho$ is linear and $\le 1$ for every level this project uses ($10^{-4}$ at
-40 dB, $10^{-2}$ at 20 dB). The Wiener denominator, however, wants the ratio to
-the **sharp** signal, and the blur has to be undone somewhere. It drops out of
-the observation model: signal and noise are independent and the noise is
-zero-mean, so
+**Four quantities, kept apart.** $\rho$ is linear and $\le 1$ for every level
+this project uses ($10^{-4}$ at 40 dB, $10^{-2}$ at 20 dB). It is one of four
+ratios that are easy to confuse:
+
+| quantity | definition | in terms of $\rho$ | needs |
+|---|---|---|---|
+| BSNR ratio (noise over *blurred* power) | $\sigma^2/\operatorname{var}(h*f)$ | $\rho$ | the BSNR |
+| noise over *original* power (the model's $K$, §14.2) | $\sigma^2/\operatorname{var}(f)$ | $\rho\,\operatorname{var}(h*f)/\operatorname{var}(f)$ | the sharp plate |
+| noise fraction of the *observed* power | $\sigma^2/\operatorname{var}(g)$ | $\approx\rho/(1+\rho)$ | the BSNR (if the split holds) |
+| **what `wiener_k_from_bsnr` returns** | $\rho/(1+\rho)$ | $\rho/(1+\rho)$ | the BSNR |
+
+The third row follows from the variance split. If noise and signal are
+uncorrelated,
 
 $$
-\operatorname{var}(g) = \operatorname{var}(h*f)
-                      + \operatorname{var}(n)
-                      = \operatorname{var}(h*f)\,(1+\rho).
-$$
-
-Estimating the signal power by the observed power — the only one available at
-restoration time — gives
-
-$$
-K = \frac{\operatorname{var}(n)}{\operatorname{var}(g)}
-  = \frac{\rho\,\operatorname{var}(h*f)}
-         {\operatorname{var}(h*f)(1+\rho)}
+\operatorname{var}(g) = \operatorname{var}(h*f) + \sigma^2
+                      = \operatorname{var}(h*f)\,(1+\rho)
+\quad\Longrightarrow\quad
+\frac{\sigma^2}{\operatorname{var}(g)}
+  = \frac{\rho\,\operatorname{var}(h*f)}{\operatorname{var}(h*f)(1+\rho)}
   = \frac{\rho}{1+\rho} .
 $$
 
-Four consequences, the last of which is a negative result:
+So $\rho/(1+\rho)$ is the noise fraction of the **observed** power. Written
+against the model's constant,
 
-* **`K = rho / (1 + rho)`, not `K = rho`.** The textbook $1/\mathrm{BSNR}$ is
-  the small-noise limit. They agree to within 1 % at every level in
-  `degradation.BSNR_LEVELS` — so the naive rule is *nearly* right **under this
-  convention** — and differ by a factor 2 at 0 dB. That 1 % is luck, not
-  algebra: had the BSNR been defined against the sharp plate, the factor would
-  be $\operatorname{var}(h*f)/\operatorname{var}(f)$, which is 0.771 for the
-  7×7 kernel, a 23 % error.
+$$
+\frac{\rho}{1+\rho} \;\approx\; \frac{\sigma^2}{\operatorname{var}(g)}
+  \;=\; \underbrace{\frac{\sigma^2}{\operatorname{var}(f)}}_{K\text{ of }
+  §14.2}\cdot\frac{\operatorname{var}(f)}{\operatorname{var}(g)} ,
+$$
+
+it is the model's $K$ with the **observed variance substituted for the sharp
+one** — the only signal power available at restoration time. The two agree only
+if $\operatorname{var}(g)=\operatorname{var}(f)$, i.e. if the noise puts back
+exactly the variance the blur took out. On every plate measured the blur takes
+out more ($|H|\le1$ for a nonnegative unit-sum kernel, so
+$\operatorname{var}(h*f)\le\operatorname{var}(f)$), and $\rho/(1+\rho)$
+overestimates the model's $K$: 1.3× for the 7×7 kernel and 3.4× for the
+51×51 one, averaged over ten plates. The same inequality makes $K=\rho$
+larger still.
+
+Consequences:
+
+* **This is an observed-power heuristic, not a derivation of the model's $K$.**
+  The BSNR fixes $\sigma^2$ relative to $\operatorname{var}(h*f)$; it carries no
+  information about $\operatorname{var}(f)$, so no function of the BSNR alone
+  can return $\sigma^2/\operatorname{var}(f)$. What it can return is a
+  deployable estimate, and §16 measures how good this one is: within
+  1.07–1.43× of the best scalar the reference could buy, and the best of the
+  deployable candidates on plates.
+* **$K=\rho/(1+\rho)$ and $K=\rho$ are the same rule for this dataset.** They
+  differ at second order in $\rho$ — at most 1 % at every level in
+  `degradation.BSNR_LEVELS`, within 0.2 % in RMSE over ten plates, a factor 2
+  at 0 dB. Neither is noise over the sharp plate.
 * **Decibels and ratios are never mixed.** `bsnr_db=30` means $\rho=10^{-3}$;
   passing $30$ where $10^{-3}$ belongs would regularise 30 000× too hard and
   return a nearly black image (at $K=1$ the 7×7 row reads
   $4.704\times10^{-1}$, worse than the blur).
-* **No kernel appears.** $\rho$ fixes the noise power and the observation fixes
-  the signal power, so the PSF does not enter the conversion; it enters the
-  filter through $|H|^2$. The same BSNR therefore yields the same $K$ for a
-  7×7 and a 51×51 kernel, which is exactly right for a formula that knows
-  nothing about the kernel.
-* **The PSF-dependent variant was computed, measured and rejected.** Assuming
-  a *white* plate, Parseval gives $\operatorname{mean}(|H|^2) = \sum h^2$ and
-  hence $\operatorname{var}(h*f) = \left(\sum h^2\right)\operatorname{var}(f)$,
-  so $K = \rho \sum h^2$. A plate is not white — its power sits in the low
-  frequencies where $|H|\approx1$ — and the measured ratio
-  $\operatorname{var}(h*f)/\operatorname{var}(f)$ is 0.771 against
-  $\sum h^2 = 0.109$ for 7×7, and 0.277 against 0.003 for 51×51:
+* **No kernel appears in the conversion, but one appears in the model's $K$.**
+  $\sigma^2/\operatorname{var}(f) = \rho\,\operatorname{var}(h*f)/
+  \operatorname{var}(f)$, and $\operatorname{var}(h*f)/\operatorname{var}(f)$
+  is 0.757 for the 7×7 kernel and 0.290 for the 51×51 one (ten-plate means).
+  The same BSNR therefore yields the same $K$ for both kernels, while the swept
+  optimum differs by about 30× between them (§16.2).
+* **The self-consistent flat-model rule is right for white signals and wrong
+  for plates.** Under assumption 2 of §14.2, Parseval gives
+  $\operatorname{var}(h*f) = \left(\sum h^2\right)\operatorname{var}(f)$, so
+  $\sigma^2/\operatorname{var}(f) = \rho\sum h^2$ — deployable, and on a white
+  texture it lands on the swept optimum (§16.3). A plate is not white:
+  $\sum h^2 = 0.109$ against the measured 0.757 (7×7), $0.0029$ against 0.290
+  (51×51), and the rule restores 1.9–2.9× worse than $\rho/(1+\rho)$ (§16.2).
+* **The heuristic works on plates by cancellation.** The flat model *under*-asks
+  for a plate's $K$ — even the exact $\sigma^2/\operatorname{var}(f)$ loses to
+  $\rho/(1+\rho)$ on the 7×7 kernel, 0/10 plates — and substituting
+  $\operatorname{var}(g)$ for $\operatorname{var}(f)$ *over*-asks. On the 7×7
+  kernel the two errors roughly cancel; on the 51×51 kernel the substitution
+  overshoots by 3.4× and the oracle wins on 10/10 plates.
 
-| kernel | BSNR | $K=\rho\sum h^2$ | RMSE | $K=\rho/(1+\rho)$ | RMSE |
-|---|---|---|---|---|---|
-| 7×7 | 30 dB | 1.089e-4 | 1.722e-1 | 9.990e-4 | **7.692e-2** |
-| 7×7 | 20 dB | 1.089e-3 | 2.123e-1 | 9.901e-3 | **8.973e-2** |
-| 51×51 | 30 dB | 2.913e-6 | 4.930e-1 | 9.990e-4 | **1.690e-1** |
-| 51×51 | 20 dB | 2.913e-5 | 4.340e-1 | 9.901e-3 | **2.299e-1** |
+**Use.** `bsnr_db=` stays as a convenience: deployable, reproducible, and as
+good as any rule derivable from the BSNR here. Scientifically controlled
+experiments — step 8's runner, any ablation, any comparison with CLS — pass an
+explicit `K=` and report it. Neither the function nor its signature changed
+(§16.5).
 
-  The white-plate route is 1.9–2.9× worse in RMSE and lands one to two orders
-  of magnitude below the useful $K$. It is recorded here as a negative result
-  so that the next person does not derive it again.
+**Verified against the data.** On a texture that `add_noise` never clips, the
+realised $\sigma^2/\operatorname{var}(g)$ matches $\rho/(1+\rho)$: formula over
+measurement 1.0003, 1.0009, 1.0016, 1.0028 at 40/30/25/20 dB
+(`test_bsnr_conversion_matches_the_realised_noise_ratio`). On a *plate* it does
+not, because clipping biases the residual; the demo prints, for plate seed 7
+and noise seed 3:
 
-The conversion is verified against the data, not against itself. On an actual
-`add_noise` output the realised residual gives
-$\sigma^2/\operatorname{var}(g)$ directly, and it matches the formula:
+```
+  kernel  bsnr rho/(1+rho)   observed   obs/K      split
+  (7, 7)    40  9.9990e-05 1.0033e-04  1.0034 9.9920e-05
+  (7, 7)    30  9.9900e-04 1.0124e-03  1.0135 9.9900e-04
+  (7, 7)    25  3.1523e-03 3.2300e-03  1.0246 3.1523e-03
+  (7, 7)    20  9.9010e-03 1.0358e-02  1.0461 9.9001e-03
+(51, 51)    40  9.9990e-05 1.0011e-04  1.0012 9.9931e-05
+(51, 51)    30  9.9900e-04 1.0048e-03  1.0058 9.9846e-04
+(51, 51)    25  3.1523e-03 3.1873e-03  1.0111 3.1495e-03
+(51, 51)    20  9.9010e-03 1.0129e-02  1.0230 9.9009e-03
+```
 
-| BSNR | $\rho$ | $K=\rho/(1+\rho)$ | measured $\sigma^2/\operatorname{var}(g)$ | ratio |
-|---|---|---|---|---|
-| 40 dB | 1.000e-4 | 9.999e-5 | 9.996e-5 | 1.0003 |
-| 30 dB | 1.000e-3 | 9.990e-4 | 9.981e-4 | 1.0009 |
-| 25 dB | 3.162e-3 | 3.152e-3 | 3.147e-3 | 1.0016 |
-| 20 dB | 1.000e-2 | 9.901e-3 | 9.874e-3 | 1.0028 |
+"observed" is $\operatorname{var}(r)/\operatorname{var}(g)$; "split" is
+$\operatorname{var}(r)/(\operatorname{var}(h*f)+\operatorname{var}(r))$, which
+`add_noise` enforces and which therefore matches the formula. The observed
+fraction exceeds it by 0.1–4.6 %, growing with the noise and with the clipped
+fraction (about 25 % of pixels for 7×7, 9–10 % for 51×51). Restoring with the
+observed fraction instead of the formula moves the RMSE by under 1 % (§16.4).
 
 ### 14.5 Numerical behaviour
 
@@ -1687,18 +1787,23 @@ destroyed, and no value of $K$ brings it back.
 ### 14.7 Limitations — say these out loud
 
 1. **One scalar $K$ cannot be optimal at every frequency.** The flat-spectrum
-   model is an average; §14.3 shows the derived value landing 1.04–1.35× from
-   the swept optimum, with the bias flipping sign between kernels.
+   model is an average. Over ten plates (§16.2) the best swept scalar reaches
+   0.70–0.94× of the derived value's RMSE, and the spectral oracle
+   $H^*S_f/(|H|^2S_f+S_n)$, which no restoration can compute, goes further
+   still (0.60–0.87×).
 2. **It cannot invent detail**, and the error is dominated by the destroyed
    band at strong blur (§14.6). It is a better *estimate*, not a better
    *measurement*: no downstream step recovers information the blur removed.
 3. **$K=0$ is not free.** It is the inverse filter, including its
    ill-conditioning; the only addition is the documented zero-gain convention
    at exact nulls, whose cost is measured in §14.5.
-4. **The BSNR conversion assumes what `add_noise` guarantees**: white,
-   zero-mean noise whose variance equals the target. A real sensor's noise
-   would have to be measured, not assumed, and the conversion would need that
-   measurement.
+4. **`add_noise` guarantees only the residual's variance.** After clipping,
+   $r=g-h*f$ has $\operatorname{var}(r)=\sigma^2$, but it is biased negative
+   and correlated with the plate, so the variance split behind
+   $\rho/(1+\rho)$ holds to 0.956–0.994, not exactly (§16.4). The cost is
+   measured, not assumed: restoring with the realised fraction instead of the
+   formula moves the RMSE by at most 1 %. A real sensor's noise would have to
+   be measured as well, and the conversion would need that measurement.
 5. **No PSNR or SSIM here.** Step 8 owns the metrics; this phase reports
    interior RMSE against $f$ only. RMSE and PSNR are monotone in each other at
    fixed peak, so the *orderings* above do not depend on the choice.
@@ -1706,11 +1811,16 @@ destroyed, and no value of $K$ brings it back.
    $[0,1]$ before scoring, as the image convention requires.
 7. **The border is meaningless under a taper.** All numbers are interior crops;
    a tapered frame must never be binarised or scored (§5.3).
-8. **Two kernels, one plate, one seed per condition**, from the generative
-   pipeline (`plates.npz` + `blur_fft`), not from the 471 MB `degraded.npz`,
-   which is gitignored and absent from this checkout. Enough to pin the
-   defaults and the conversion; step 8's runner is what turns this into a
-   survey.
+8. **Two kernels and few samples**, from the generative pipeline
+   (`plates.npz` + `blur_fft`), not from the 471 MB `degraded.npz`, which is
+   gitignored and absent from this checkout. §14.3 uses one plate and one seed
+   per condition; §16 extends the $K$ comparison to ten plates and ten noise
+   draws at two levels. Enough to pin the defaults and the conversion; step
+   8's runner is what turns this into a survey.
+9. **$K$ from the BSNR is a heuristic.** It is the noise fraction of the
+   observed power, not the model's noise-to-sharp-signal ratio, and it ignores
+   the kernel (§14.4). Scientifically controlled experiments pass an explicit
+   `K=` and report it; `bsnr_db=` is a convenience for deployment and demos.
 
 ---
 
@@ -1726,7 +1836,7 @@ destroyed, and no value of $K$ brings it back.
 
 | Decision | Alternative rejected | Evidence |
 |---|---|---|
-| `K = \rho/(1+\rho)` from `var(g) = var(h*f)(1+\rho)` | $K=\rho$ (naive $1/$BSNR); $K=\rho\sum h^2$ (white plate) | §14.4: agree to 1 % here but a factor 2 at 0 dB; the white-plate route is 1.9–2.9× worse in RMSE |
+| `K = \rho/(1+\rho)` from `var(g) = var(h*f)(1+\rho)` | $K=\rho$ (naive $1/$BSNR); $K=\rho\sum h^2$ (white plate) | §14.4: agree to 1 % here but a factor 2 at 0 dB; the white-plate route is 1.9–2.9× worse in RMSE. *Phase 4.3.1 (§16): kept, but re-described as the noise fraction of the observed power — an observed-power heuristic, not the model's $\sigma^2/\operatorname{var}(f)$.* |
 | `wiener_k_from_bsnr` takes no PSF | a PSF-aware conversion | the PSF enters only through $|H|^2$; adding it invites the rejected variant above |
 | **exactly one** of `K=` / `bsnr_db=` required, neither defaulted | a default $K$ such as $10^{-3}$ | $K$ is a property of the noise; §14.3 shows a wrong $K$ can be worse than no restoration |
 | default `profile="none"` (shared with step 4.2) | the module default `tukey` | §12.3 measured it; the Wiener arm inherits the same rounding model |
@@ -1752,3 +1862,124 @@ docstrings carry LaTeX, and the 12 doctests in the module pass.
 **Next.** Step 4.4 (CLS) replaces the shutter justification by a smoothness
 prior, $\lambda|C|^2$ in the same denominator position; step 4.5
 (Richardson–Lucy) leaves the frequency domain. Neither is started here.
+
+---
+
+## 16. Wiener BSNR-to-$K$ mathematical audit (Phase 4.3.1 / 4.3.2)
+
+This section records the mathematical audit of the BSNR-to-$K$ regularisation
+conversion implemented in `wiener_k_from_bsnr`, as conducted in Phase 4.3.1 and
+finalised in Phase 4.3.2. For the complete numerical tables, 10-seed standard
+deviations, multi-plate evaluations, and white-noise controls, refer directly to
+the standalone audit report: [`docs/wiener_mathematical_audit.md`](wiener_mathematical_audit.md).
+
+### 16.1 The repository's BSNR definition
+
+`degradation.noise_sigma` fixes the definition of BSNR once for the entire
+pipeline:
+
+$$
+\mathrm{BSNR}_{\mathrm{dB}} = 10 \log_{10} \frac{\operatorname{var}(h * f)}{\sigma_n^2}
+$$
+
+Key properties:
+* **Power ratio ($10\log_{10}$)**: It compares signal variance to noise
+  variance, not amplitudes ($20\log_{10}$).
+* **Defined against the blurred plate**: The signal variance is
+  $\operatorname{var}(h * f)$, **not** the sharp plate's variance
+  $\operatorname{var}(f)$.
+* **Dimensionless linear ratio**:
+  $$
+  \rho = 10^{-\mathrm{BSNR}_{\mathrm{dB}}/10} = \frac{\sigma_n^2}{\operatorname{var}(h * f)}
+  $$
+
+### 16.2 Observed-power heuristic vs the classical Wiener model
+
+The MMSE derivation (§14.2) requires $K_{\mathrm{model}} = S_n / S_f$. Under
+the standard flat-spectrum assumption, this is the noise power over the
+**sharp** plate's power:
+
+$$
+K_{\mathrm{model}} = \frac{\sigma_n^2}{\operatorname{var}(f)} \qquad \text{(Candidate C, an oracle)}
+$$
+
+What `wiener_k_from_bsnr` evaluates instead is:
+
+$$
+K_A = \frac{\rho}{1 + \rho} = \frac{\sigma_n^2 / \operatorname{var}(h * f)}{1 + \sigma_n^2 / \operatorname{var}(h * f)}
+    = \frac{\sigma_n^2}{\operatorname{var}(h * f) + \sigma_n^2} \approx \frac{\sigma_n^2}{\operatorname{var}(g)}
+$$
+
+This is the noise fraction of the **observed (degraded) power**. Writing it in
+terms of the model's $K_{\mathrm{model}}$:
+
+$$
+K_A = K_{\mathrm{model}} \cdot \frac{\operatorname{var}(f)}{\operatorname{var}(g)}
+$$
+
+Because any passive low-pass blur attenuates image variance
+($\operatorname{var}(h * f) < \operatorname{var}(f)$), the degraded variance
+is smaller than the sharp variance ($\operatorname{var}(g) < \operatorname{var}(f)$)
+whenever blur variance loss exceeds added noise power (true for every tested
+plate and BSNR level). Consequently:
+
+$$
+K_A > K_{\mathrm{model}}
+$$
+
+$K_A$ is an **observed-power heuristic**, not theoretically equivalent to the
+classical noise-to-original-signal power ratio.
+
+### 16.3 Impact of clipping and saturation compensation
+
+The forward model in `degradation.add_noise` clips pixels to $[0, 1]$ and uses
+a fixed-point loop (`saturation_compensation=True`) to rescale the Gaussian
+amplitude until the realised residual $r = g - h * f$ has
+$\operatorname{var}(r) = \sigma_n^2$.
+
+On license plates ($\approx 60\%$ white background at $1.0$):
+1. **Residual bias**: Clipping truncates positive excursions on bright pixels.
+   The residual is not zero-mean (measured $\mathbb{E}[r] \approx -2.3\times 10^{-3}$
+   at 30 dB, $-7.3\times 10^{-3}$ at 20 dB).
+2. **Signal-noise correlation**: Pixels with $h * f \approx 1$ clip downwards
+   ($r \le 0$), inducing negative covariance $\operatorname{Cov}(h * f, r) < 0$
+   (measured $-7.3\times 10^{-4}$ at 30 dB, $-2.4\times 10^{-3}$ at 20 dB).
+3. **Variance split breakdown**:
+   $\operatorname{var}(g) = \operatorname{var}(h * f) + \operatorname{var}(r) + 2\operatorname{Cov}(h * f, r) < \operatorname{var}(h * f) + \operatorname{var}(r)$.
+   The split ratio $\operatorname{var}(g) / (\operatorname{var}(h * f) + \sigma_n^2)$
+   drops to $0.987$ at 30 dB and $0.955$ at 20 dB.
+4. **Practical sensitivity**: Restoring with the realised observed noise
+   fraction $K_{A,\mathrm{obs}} = \operatorname{var}(r) / \operatorname{var}(g)$
+   changes RMSE by under $0.9\%$ across all tested conditions.
+
+### 16.4 Candidate $K$ comparison and experimental findings
+
+Controlled experiments across 10 random seeds on both small (7×7) and large
+(51×51) kernels at 20 dB and 30 dB BSNR yielded the following findings:
+
+* **Candidate A ($K_A = \frac{\rho}{1+\rho}$) vs Candidate B ($K_B = \rho$)**:
+  Candidate B is the direct BSNR ratio $\sigma_n^2 / \operatorname{var}(h * f)$.
+  $K_B$ and $K_A$ differ by $\rho^2 / (1 + \rho)$ ($\le 0.99\%$ at $\ge 20$ dB).
+  In practice, they are **nearly indistinguishable**: RMSE differs by less
+  than $0.2\%$, and PSNR differs by less than $0.02$ dB across all tested
+  conditions.
+* **Candidate C ($K_C = \sigma_n^2 / \operatorname{var}(f)$)**:
+  Candidate C is an **offline oracle** that requires the unavailable clean
+  image variance $\operatorname{var}(f)$; it cannot be deployed in ordinary
+  restoration. On large blur (51×51), Candidate C improved RMSE by $9.3\%$
+  (30 dB) and $14.9\%$ (20 dB) because severe blur destroys high frequencies
+  and over-regularising causes blurring to remain uncorrected. On small blur
+  (7×7), Candidate C performed **worse** than Candidate A by $6.7\%\text{--}11.3\%$
+  because the flat-spectrum model under-regularises high frequencies, and
+  Candidate A's inflation helps compensate for this mismatch.
+* **Candidate W ($K_W = \rho \sum h^2$)**:
+  Candidate W is the Parseval white-signal estimate ($\operatorname{var}(h * f) = \sum h^2 \operatorname{var}(f)$).
+  It proved completely unsuitable for structured license-plate images
+  ($2.2\times\text{--}3.4\times$ worse RMSE, performing worse than doing
+  nothing on large blurs) because plate glyphs have highly colored spectra.
+* **Non-universality of scalar $K$**:
+  No single scalar BSNR-derived $K$ was universally optimal across all tested
+  blur conditions. For scientifically controlled experiments, ablations, and
+  pipeline benchmarking (Stage 8), callers should pass an explicit `K=`
+  parameter to explore parameter sensitivity rather than relying on the
+  convenience heuristic `bsnr_db=`.

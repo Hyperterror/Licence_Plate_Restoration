@@ -18,7 +18,8 @@ the first three of them:
   pieces above;
 * :func:`wiener_filter` / :func:`wiener_k_from_bsnr` -- step 4.3's minimum mean
   square error filter, ``\\hat{F} = H^{*} G / (|H|^{2} + K)``, and the BSNR to
-  ``K`` conversion derived from ``degradation.noise_sigma``.
+  ``K`` conversion -- an observed-power heuristic built on
+  ``degradation.noise_sigma``, audited in section 16 of the docs.
 
 Constrained least squares and Richardson--Lucy are deliberately *not* here
 (steps 4.4-4.5).  They reduce to the same recipe -- "build ``H`` with
@@ -1160,9 +1161,15 @@ def inverse_filter(image, psf, eps: float = DEFAULT_EPS,
 def wiener_k_from_bsnr(bsnr_db) -> float:
     """Convert a target BSNR into the Wiener regularisation constant ``K``.
 
-    The conversion is derived from the repository's own definition of the
-    quantity, not from the way its name is usually read.
-    ``degradation.noise_sigma`` fixes it once and for all::
+    Returns ``K = rho / (1 + rho)`` with ``rho = 10 ** (-bsnr_db / 10)``.
+    This is an **observed-power heuristic**: it is the noise fraction of the
+    *degraded* image's variance, not the noise-to-*sharp*-signal ratio that
+    the scalar Wiener model asks for.  It is kept because nothing better can
+    be computed from the BSNR alone on this dataset (section 16 of the docs);
+    a scientifically controlled experiment should pass an explicit ``K=`` to
+    :func:`wiener_filter` and report it.
+
+    **The BSNR.**  ``degradation.noise_sigma`` fixes the convention::
 
         sigma = sqrt(var(img) / 10 ** (bsnr_db / 10))      # img = h * f
 
@@ -1171,18 +1178,15 @@ def wiener_k_from_bsnr(bsnr_db) -> float:
 
     .. math:: \\mathrm{BSNR}_{dB}
               = 10 \\log_{10} \\frac{\\operatorname{var}(h*f)}
-              {\\operatorname{var}(n)} .
+              {\\sigma^{2}} .
 
     ``degradation.measure_bsnr`` reports the same quantity as
-    ``10 * log10(var(clean) / var(noisy - clean))``, and ``add_noise`` has
-    already made that measurement true of the *clipped* noisy image, so the
-    number a caller passes here describes the degradation that was applied.
-    Write the linear, dimensionless ratio
+    ``10 * log10(var(clean) / var(noisy - clean))``.  Write the linear,
+    dimensionless ratio
 
     .. math:: \\rho = 10^{-\\mathrm{BSNR}_{dB}/10}
               \\quad\\Longleftrightarrow\\quad
-              \\operatorname{var}(n)
-              = \\rho \\operatorname{var}(h*f) .
+              \\sigma^{2} = \\rho \\operatorname{var}(h*f) .
 
     ``rho`` is linear and ``<= 1`` for every level this project uses
     (40 dB -> 1e-4, 30 dB -> 1e-3, 20 dB -> 1e-2); the decibels are what the
@@ -1190,51 +1194,65 @@ def wiener_k_from_bsnr(bsnr_db) -> float:
     the two up is the classic error: feeding ``30`` where ``1e-3`` belongs
     regularises 30 000x too hard and returns a nearly black image.
 
-    The Wiener denominator wants the noise-to-signal ratio of the *sharp*
-    plate, so the blur has to be undone somewhere.  It is undone by the
-    observation model itself.  Signal and noise are independent and the
-    noise is zero-mean, so the degraded image's variance splits exactly:
+    ``add_noise`` clips to ``[0, 1]`` and rescales the Gaussian amplitude
+    until the *realised, clipped* residual ``r = g - h*f`` has
+    ``var(r) = sigma^2`` (to 1e-3).  That residual is **not** zero-mean --
+    clipping at the white background pushes it negative -- and it is
+    anticorrelated with the signal, so ``var(g) = var(h*f) + var(r)`` does
+    not hold exactly: on plates ``var(g) / (var(h*f) + var(r))`` is
+    0.956-0.994.
 
-    .. math:: \\operatorname{var}(g)
-              = \\operatorname{var}(h*f) + \\operatorname{var}(n)
-              = \\operatorname{var}(h*f)\\,(1 + \\rho) .
+    **The Wiener constant.**  For ``G = HF + N`` with ``N`` uncorrelated with
+    ``F``, the MMSE filter is ``H* S_f / (|H|^2 S_f + S_n)``.  It collapses
+    to ``H* / (|H|^2 + K)`` only if ``S_n / S_f`` is the same at every
+    frequency -- white noise *and* a flat signal spectrum -- and then, with
+    NumPy's unnormalised DFT (``S_n = MN sigma^2``, mean ``S_f`` about
+    ``MN var(f)``),
 
-    Estimating the signal power by the observed power -- the only one
-    available at restoration time -- gives
+    .. math:: K_{model} = \\frac{S_n}{S_f}
+              = \\frac{\\sigma^{2}}{\\operatorname{var}(f)} ,
 
-    .. math:: K = \\frac{\\operatorname{var}(n)}
-              {\\operatorname{var}(g)}
-              = \\frac{\\rho \\operatorname{var}(h*f)}
-                     {\\operatorname{var}(h*f)\\,(1 + \\rho)}
-              = \\frac{\\rho}{1 + \\rho} .
+    the noise power over the **sharp** plate's power.
 
-    Four points worth quoting in the viva:
+    **What is returned instead.**  If ``var(g) = var(h*f) + sigma^2``,
 
-    * ``K = rho / (1 + rho)`` is the honest form.  ``K = rho``, i.e. the
-      textbook ``1 / BSNR_linear``, is its small-noise limit: the two agree
-      to within 1% at every level in ``degradation.BSNR_LEVELS``, so the
-      naive rule is *nearly* right **under this repository's convention** --
-      but they differ by a factor two at 0 dB, and the naive rule would be
-      wrong outright if the BSNR had been defined against the sharp plate.
-    * No kernel appears.  ``rho`` fixes the noise power and the observation
-      fixes the signal power, so the PSF does not enter the conversion at
-      all; it enters the filter through ``|H|^2``.  A consequence worth
-      stating: the same BSNR yields the same ``K`` for a 7x7 and a 51x51
-      kernel, and section 14.3 shows the empirical optimum barely moves with
-      the kernel either.
-    * The plausible-looking alternative, ``K = rho * sum(h**2)``, is **not**
-      used.  It follows from assuming a white plate -- Parseval gives
-      ``mean(|H|^2) = sum(h**2)``, hence ``var(h*f) = sum(h**2) var(f)`` --
-      and a plate is not white: its power sits where ``|H| ~ 1``.  Measured
-      on a rendered plate, ``var(h*f)/var(f)`` is 0.771 for the 7x7 kernel
-      against ``sum(h**2) = 0.109`` (0.277 against 0.003 for 51x51), so that
-      route lands one to two orders of magnitude below the useful ``K`` and
-      restores 1.9-2.9x worse at 20-30 dB (section 14.4 of the docs).  It is
-      recorded there as a negative result.
-    * ``K`` is a per-frequency ratio collapsed to one scalar.  The flat
-      spectrum is a model of the *average*; the derived value sits 1.04-1.35x
-      (in RMSE) from the empirical optimum on the four noisy rows of section
-      14.3.
+    .. math:: \\frac{\\rho}{1 + \\rho}
+              = \\frac{\\sigma^{2}}{\\operatorname{var}(h*f) + \\sigma^{2}}
+              \\approx \\frac{\\sigma^{2}}{\\operatorname{var}(g)}
+              = K_{model} \\,
+                \\frac{\\operatorname{var}(f)}{\\operatorname{var}(g)} ,
+
+    the noise fraction of the **observed** power: ``K_model`` with the
+    observed variance substituted for the sharp one, the only signal power
+    available at restoration time.  The two agree only if
+    ``var(g) = var(f)``.  A blur that removes more variance than the noise
+    adds (every plate sample measured) makes this an overestimate of
+    ``sigma^2 / var(f)``: by 1.3x for the 7x7 smear and 3.4x for the 51x51
+    one, averaged over ten plates.
+
+    Points worth quoting in the viva:
+
+    * ``K = rho`` (the textbook ``1 / BSNR_linear``) differs from this only
+      at second order in ``rho``: at most 1% at every level in
+      ``degradation.BSNR_LEVELS``, within 0.2% in RMSE, a factor two at
+      0 dB.  Neither is noise over the sharp plate; both are noise over a
+      *blurred* or *observed* power.
+    * No kernel appears in the conversion, but one does in ``K_model``:
+      ``sigma^2 / var(f) = rho var(h*f) / var(f)``.  So the same BSNR gives
+      the same ``K`` for a 7x7 and a 51x51 kernel while the swept optimum
+      differs by about 30x between them (section 16).
+    * ``K = rho * sum(h**2)`` is the self-consistent flat-spectrum estimate
+      (Parseval: ``var(h*f) = sum(h**2) var(f)`` for a white ``f``).  On a
+      white texture it is exact and lands on the swept optimum; a plate is
+      not white -- ``var(h*f)/var(f)`` is 0.757 against
+      ``sum(h**2) = 0.109`` for 7x7, 0.290 against 0.0029 for 51x51 -- and
+      there it restores 1.9-2.9x worse than this heuristic.
+    * The heuristic's good showing is a cancellation, not a derivation: the
+      flat model underestimates the ``K`` a plate needs (its power sits
+      where ``|H| ~ 1``), and substituting ``var(g)`` for ``var(f)``
+      overestimates it.  Over ten plates the best swept scalar reaches
+      0.70-0.94x of its RMSE.  Clipping is immaterial to the choice: the
+      realised noise fraction restores within 1% of the formula.
 
     Parameters
     ----------
@@ -1247,7 +1265,8 @@ def wiener_k_from_bsnr(bsnr_db) -> float:
     Returns
     -------
     float
-        ``K`` in ``[0, 1)``, the noise-to-signal *power* ratio the Wiener
+        ``K`` in ``[0, 1)``: the noise fraction of the observed power under
+        the repository's BSNR convention, used as the constant the Wiener
         denominator adds to ``|H|^2``.
 
     Raises
@@ -1287,12 +1306,14 @@ def wiener_filter(image, psf, K: float | None = None, *,
     coefficient returns multiplied by ``1 / |H|`` -- and so does the noise
     riding on it, which is why a notch yields grain instead of detail.  The
     Wiener filter asks a different question: which multiplier minimises
-    ``E|F_est - F|^2`` for each coefficient?  For white noise of power ``N0``
-    and a locally white signal of power ``S0``, uncorrelated with the noise,
-    the answer is
+    ``E|F_est - F|^2`` for each coefficient?  For noise uncorrelated with
+    the plate the answer is ``H* S_f / (|H|^2 S_f + S_n)``; if the noise is
+    white and the plate's spectrum is modelled as flat, ``S_n / S_f`` is one
+    constant and
 
     .. math:: \\hat{F}(u,v) = \\frac{H^{*}(u,v)}
-              {|H(u,v)|^{2} + K} \\, G(u,v), \\qquad K = N_0 / S_0 ,
+              {|H(u,v)|^{2} + K} \\, G(u,v), \\qquad
+              K = \\frac{\\sigma^{2}}{\\operatorname{var}(f)} ,
 
     which is the inverse filter's quotient ``G / H`` multiplied by the real,
     frequency-dependent taper
@@ -1311,7 +1332,8 @@ def wiener_filter(image, psf, K: float | None = None, *,
       denominator adds ``K`` to it, so it is at least ``K`` whenever
       ``K > 0``: no floor of the :func:`safe_divide` kind is needed, and none
       is applied, because a floor would change the equation being solved.
-    * ``K`` is the only knob: the noise-to-signal *power* ratio.  Where the
+    * ``K`` is the only knob: in the flat model, the noise power over the
+      *sharp* plate's power.  Where the
       blur passed the signal (``|H|^{2} >> K``) the taper is ~1 and the filter
       inverts; where the blur annihilated it (``|H|^{2} << K``) the taper is
       ~0 and the filter passes nothing, which is correct -- at a true null
@@ -1360,13 +1382,16 @@ def wiener_filter(image, psf, K: float | None = None, *,
         The kernel that produced ``image``, consumed **as-is** (the stored
         ``<key>_psf``) and validated by :func:`validate_psf`.
     K:
-        Regularisation constant: the noise-to-signal power ratio, finite and
-        ``>= 0``.  ``K = 0`` is the inverse filter of step 4.2.  Mutually
-        exclusive with ``bsnr_db``.
+        Regularisation constant, finite and ``>= 0``: in the flat-spectrum
+        model, noise power over sharp-signal power.  ``K = 0`` is the inverse
+        filter of step 4.2.  The form to use for controlled experiments.
+        Mutually exclusive with ``bsnr_db``.
     bsnr_db:
         Target BSNR in decibels, the level ``degradation.add_noise`` was
         asked for; converted to ``K = rho / (1 + rho)`` by
-        :func:`wiener_k_from_bsnr`.  Mutually exclusive with ``K``.
+        :func:`wiener_k_from_bsnr`, an observed-power heuristic (the noise
+        fraction of ``var(g)``), not the model's ``sigma^2 / var(f)``.  A
+        deployable convenience.  Mutually exclusive with ``K``.
     width, fraction, profile:
         Forwarded to :func:`taper_edges`.  The default profile is
         ``DEFAULT_INVERSE_TAPER`` (``"none"``) for the measured reason in
@@ -1408,8 +1433,8 @@ def wiener_filter(image, psf, K: float | None = None, *,
     * One scalar ``K`` is the flat-spectrum simplification.  A plate's power is
       concentrated in its glyphs, so the true signal-to-noise ratio varies
       across the grid and no single ``K`` is optimal everywhere; the value is a
-      compromise, and section 14.3 measures how far the derived one is from
-      the empirical optimum.
+      compromise, and section 16 measures, over ten plates, how far the
+      BSNR-derived one is from the swept optimum.
     * It cannot invent detail.  Where the blur destroyed a frequency the taper
       is ~0, so a stroke the blur erased stays erased -- the gain is that the
       noise is not amplified there.  On *clean* input the inverse filter is
@@ -1660,6 +1685,144 @@ def _demo() -> None:  # pragma: no cover
                 derived = f"{wiener_k_from_bsnr(bsnr):.3e}"
             print(f"K sweep {str(kernel.shape):>7} {label:>6} "
                   f"(bsnr K {derived}) -> {sweep}")
+
+    _audit_wiener_k(rmse)
+
+
+def _audit_wiener_k(rmse) -> None:  # pragma: no cover
+    """Multi-seed audit of the BSNR -> K conversion (docs section 16).
+
+    Every candidate sees the same plates, kernels, noise draws and metric.
+    A starred name reads the clean plate (or the clean blurred plate), so it
+    is an offline oracle that :func:`wiener_filter` can never compute.
+    """
+    from license_plate_restoration.degradation import (
+        BSNR_LEVELS,
+        add_noise,
+        blur_fft,
+        noise_sigma,
+    )
+    from license_plate_restoration.psf_builder import (
+        combine_psfs,
+        make_defocus_psf,
+        make_motion_psf,
+    )
+    from license_plate_restoration.renderer import generate_plates
+
+    grid = np.logspace(-6.0, 0.0, 25)
+    seeds = tuple(range(10))
+    kernels = [combine_psfs(make_motion_psf(length, 8.0),
+                            make_defocus_psf(radius))
+               for length, radius in ((3, 0), (21, 4))]
+    # The white control: i.i.d. uniform values, so S_f is flat by design.
+    # It stays inside [0.25, 0.75] after blurring, so add_noise never clips.
+    samples = {
+        "plate": [generate_plates(1, seed=seed)[0][0] for seed in seeds],
+        "white": [(0.25 + 0.5 * np.random.default_rng(1000 + seed).random(
+            (96, 336))).astype(np.float32) for seed in seeds],
+    }
+
+    def stats(values) -> str:
+        values = np.asarray(values, dtype=np.float64)
+        return f"{values.mean():.3e} +- {values.std(ddof=1):.1e}"
+
+    for kind, plates in samples.items():
+        for kernel in kernels:
+            energy = float(np.sum(np.asarray(kernel, np.float64) ** 2))
+            for bsnr in (30.0, 20.0):
+                rows: dict[str, list[float]] = {}
+                for seed, sharp in zip(seeds, plates):
+                    f64 = sharp.astype(np.float64)
+                    response = psf_frequency_response(kernel, sharp.shape)
+                    if kind == "plate":
+                        blurred = blur_fft(sharp, kernel)
+                    else:
+                        # Circular forward model: the filter's own model,
+                        # so the control measures K and nothing else.
+                        blurred = np.real(np.fft.ifft2(
+                            np.fft.fft2(f64) * response)).astype(np.float32)
+                    noisy = add_noise(blurred, bsnr, seed=100 + seed)
+                    b64 = blurred.astype(np.float64)
+                    g64 = noisy.astype(np.float64)
+                    resid = g64 - b64
+                    rho = 10.0 ** (-bsnr / 10.0)
+                    power = noise_sigma(blurred, bsnr) ** 2
+                    candidates = {
+                        "A": wiener_k_from_bsnr(bsnr),
+                        "B": rho,
+                        "C*": power / f64.var(),
+                        "W": rho * energy,
+                        "A_obs*": resid.var() / g64.var(),
+                    }
+                    sweep = [rmse(wiener_filter(noisy, kernel, K=constant),
+                                  sharp) for constant in grid]
+                    candidates["best*"] = float(grid[int(np.argmin(sweep))])
+                    for name, constant in candidates.items():
+                        rows.setdefault("K " + name, []).append(constant)
+                        rows.setdefault(name, []).append(rmse(
+                            wiener_filter(noisy, kernel, K=constant), sharp))
+                    signal = np.abs(np.fft.fft2(f64)) ** 2
+                    gain = (np.conj(response) * signal
+                            / (np.abs(response) ** 2 * signal
+                               + sharp.size * power))
+                    spectral = clip_unit_interval(np.real(np.fft.ifft2(
+                        gain * np.fft.fft2(g64))))
+                    extra = {
+                        "degraded": rmse(noisy, sharp),
+                        "inverse": rmse(inverse_filter(noisy, kernel), sharp),
+                        "spectral*": rmse(spectral, sharp),
+                        "passband": b64.var() / f64.var(),
+                        "mean": resid.mean(),
+                        "split": g64.var() / (b64.var() + resid.var()),
+                        "clipped": float(np.mean((g64 <= 0.0)
+                                                 | (g64 >= 1.0))),
+                        "realised": resid.var() / power,
+                    }
+                    for name, value in extra.items():
+                        rows.setdefault(name, []).append(value)
+
+                print()
+                print(f"K audit {kind} {str(kernel.shape):>8} {bsnr:g} dB, "
+                      f"{len(seeds)} seeds: sum h^2 = {energy:.4f}, "
+                      f"var(h*f)/var(f) = {stats(rows['passband'])}")
+                print(f"  degraded rmse {stats(rows['degraded'])}   "
+                      f"inverse rmse {stats(rows['inverse'])}")
+                reference = np.asarray(rows["A"])
+                for name in ("A", "B", "C*", "W", "A_obs*", "best*"):
+                    errors = np.asarray(rows[name])
+                    constants = np.asarray(rows["K " + name])
+                    wins = int(np.count_nonzero(errors < reference))
+                    print(f"  {name:>6} K {constants.mean():.3e} "
+                          f"[{constants.min():.2e}, {constants.max():.2e}]"
+                          f"  rmse {stats(errors)}  /A "
+                          f"{float(np.mean(errors / reference)):.3f}  "
+                          f"beats A {wins}/{len(seeds)}")
+                print(f"  spectral* rmse {stats(rows['spectral*'])}")
+                print(f"  clipping: mean(g-b) {stats(rows['mean'])}, "
+                      f"var(g)/(var(b)+var(g-b)) "
+                      f"{float(np.mean(rows['split'])):.4f}, clipped "
+                      f"{100.0 * float(np.mean(rows['clipped'])):.1f}%, "
+                      f"var(g-b)/sigma^2 "
+                      f"{float(np.mean(rows['realised'])):.4f}")
+
+    # What the conversion claims against what the clipped noise realises,
+    # on the demo plate and noise seed the tables above use.
+    plate = generate_plates(1, seed=7)[0][0]
+    print()
+    print(f"{'kernel':>8} {'bsnr':>5} {'rho/(1+rho)':>11} "
+          f"{'observed':>10} {'obs/K':>7} {'split':>10}")
+    for kernel in kernels:
+        blurred = blur_fft(plate, kernel)
+        b64 = blurred.astype(np.float64)
+        for bsnr in BSNR_LEVELS:
+            g64 = add_noise(blurred, bsnr, seed=3).astype(np.float64)
+            resid = g64 - b64
+            formula = wiener_k_from_bsnr(bsnr)
+            observed = resid.var() / g64.var()
+            split = resid.var() / (b64.var() + resid.var())
+            print(f"{str(kernel.shape):>8} {bsnr:>5g} {formula:>11.4e} "
+                  f"{observed:>10.4e} {observed / formula:>7.4f} "
+                  f"{split:>10.4e}")
 
 
 if __name__ == "__main__":  # pragma: no cover
