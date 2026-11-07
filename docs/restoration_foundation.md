@@ -2457,33 +2457,73 @@ A Poisson random variable is unbounded above ($\operatorname{supp}(C) = \mathbb{
   * **Artifact:** Clipping acted as an artificial non-linear noise suppressor, artificially flattering Stage 4.5 restoration scores. Stage 4.5 single-seed results are therefore designated as **SUPERSEDED**.
 
 ##### 3.2 Corrected Methodology 1: Calibrated Photometric Headroom Scaling (10 Seeds, Public API):
-To satisfy the project's strict $[0, 1]$ image contract (`validate_image`) without any clipping, the latent scene is exposed with calibrated photometric headroom $s_{\text{scale}} = 0.70$ (leaving $> 11\sigma$ headroom below sensor saturation at $N=1,000$ photons).
-* Sensor counts: $C(x, y) \sim \operatorname{Poisson}(N \cdot s_{\text{scale}} \cdot b(x, y))$.
-* Normalized observation: $g_{\text{obs}} = C / N \in [0, 1]$ strictly without clipping ($P(C > N) < 10^{-28}$). Zero pixels are truncated.
-* Restored estimate: Each public filter restores the scaled observation ($\hat{f}_{\text{scaled}}$), which is then calibrated back to unit scale: $\hat{f} = \operatorname{clip}(\hat{f}_{\text{scaled}} / s_{\text{scale}}, 0.0, 1.0)$.
-* Because RL's multiplicative ratio is scale invariant ($\frac{s_{\text{scale}} g}{s_{\text{scale}} Hf} = \frac{g}{Hf}$), headroom scaling preserves the exact mathematical dynamics of Richardson–Lucy deconvolution while remaining 100% compliant with public API contracts.
+To satisfy the project's strict $[0, 1]$ image contract (`validate_image`) without silent clipping, the latent scene is exposed with calibrated photometric headroom $s_{\text{scale}} = 0.70$.
+
+*Mathematical Derivation of Effective Photon Budget:*
+Sensor count draws are $C(x, y) \sim \operatorname{Poisson}(N \cdot s_{\text{scale}} \cdot b(x, y))$ where $b(x, y) \in [0, 1]$ is the blurred plate and $N$ is the nominal photon parameter.
+The normalized observation passed to the public filter is $g = C / N$. Its expectation and variance are:
+$$\mathbb{E}[g] = s_{\text{scale}} \cdot b(x, y), \qquad \operatorname{Var}(g) = \frac{s_{\text{scale}} \cdot b(x, y)}{N}$$
+The restored estimate $\hat{f}_{\text{scaled}}$ resides in the scaled intensity domain $[0, s_{\text{scale}}]$ and is calibrated back to unit scale via $\hat{f} = \operatorname{clip}(\hat{f}_{\text{scaled}} / s_{\text{scale}}, 0.0, 1.0)$.
+Expressed on the original unit intensity scale, the effective observation is $g_{\text{unit}} = g / s_{\text{scale}} = \frac{C}{N s_{\text{scale}}}$, whose variance is:
+$$\operatorname{Var}(g_{\text{unit}}) = \operatorname{Var}\left(\frac{C}{N s_{\text{scale}}}\right) = \frac{N s_{\text{scale}} b(x, y)}{(N s_{\text{scale}})^2} = \frac{b(x, y)}{N s_{\text{scale}}}$$
+Comparing this to an unscaled Poisson observation model where $\operatorname{Var}(g_0) = \frac{b(x, y)}{N_{\text{eff}}}$, we have:
+$$N_{\text{eff}} = s_{\text{scale}} \cdot N$$
+Therefore, **headroom scaling changes the effective photon budget to $N_{\text{eff}} = s_{\text{scale}} N$ rather than preserving the nominal budget $N$**:
+* Nominal $N = 1,000 \implies N_{\text{eff}} = 700$ photons ($30\%$ flux reduction).
+* Nominal $N = 5,000 \implies N_{\text{eff}} = 3,500$ photons.
+* Nominal $N = 20,000 \implies N_{\text{eff}} = 14,000$ photons.
+Headroom scaling preserves the scale invariance of the Richardson–Lucy multiplicative ratio ($\frac{s g}{s H f} = \frac{g}{H f}$), but the noise variance corresponds to effective flux $N_{\text{eff}}$.
+
+*Rare-Event Handling and Qualified Exceedance Bounds:*
+Because the Poisson distribution has unbounded support over all $\mathbb{N}_0$, no finite headroom factor can provide a mathematical guarantee of zero exceedance ($P(C > N) \equiv 0$ is mathematically impossible).
+However, setting $s_{\text{scale}} = 0.70$ provides an $11.33\sigma$ headroom margin below the $1.0$ saturation threshold at nominal $N=1,000$ (where $\mu = 700$, $\sigma = \sqrt{700} \approx 26.46$, and the margin is $(1000 - 700) / 26.46 \approx 11.34$).
+By the Chernoff / Bennett bound for Poisson distributions:
+$$P(C \ge N) \le \exp\left(-\mu \left((1+\delta)\ln(1+\delta) - \delta\right)\right) \le 2.3 \times 10^{-25} \quad \text{per pixel}$$
+By the union bound across all $32,256$ pixels of a $96 \times 336$ license plate frame:
+$$P(\text{frame exceedance}) \le 32256 \times 2.3 \times 10^{-25} \le 7.4 \times 10^{-21}$$
+At $N=5,000$, the margin is $25.35\sigma$ ($P < 10^{-130}$); at $N=20,000$, the margin is $50.70\sigma$ ($P < 10^{-500}$).
+*Explicit Failure on Exceedance:* Raw Poisson observations are **never silently clipped**. If an observation array ever has $\max(g) > 1.0$ or $\min(g) < 0.0$, the experiment raises an explicit `RuntimeError` and halts the trial. Across all 10 evaluation seeds (30 trials total), $0$ trials exceeded $[0, 1]$.
+*Distinction in Clipping Policy:* Raw observations are strictly unclipped. Final unit-interval clipping (`clip_unit_interval`) applies conceptually and strictly only to the post-restoration rescaled estimate ($\hat{f}_{\text{scaled}} / s_{\text{scale}}$).
+*Practical API Limitation:* A bounded $[0, 1]$ public image processing API cannot represent every possible realization of an unbounded Poisson process without either headroom scaling (which reduces effective flux) or silent truncation (which introduces bias and cuts variance).
+
+*Audit of Wiener and CLS Parameter Scaling:*
+* **CLS Filter Regularization ($\lambda$):** The unconstrained CLS objective is $\min_f \|g - Hf\|_2^2 + \lambda \|Cf\|_2^2$. Under uniform image scaling $g \to s g$, both the residual term $\|s g - H (s f)\|^2 = s^2 \|g - Hf\|^2$ and the regularization term $\lambda \|C (s f)\|^2 = s^2 \lambda \|Cf\|^2$ scale by $s^2$. The minimizer scales as $s f^*$. Dividing by $s$ post-hoc recovers $f^*$ identically. Hence, **CLS regularization $\lambda$ is strictly invariant to uniform amplitude scaling $s$ and requires no adjustment**.
+* **Wiener Filter Parameter ($K$):** The scalar Wiener regularizer represents the noise-to-signal power ratio $K = \sigma_n^2 / \sigma_f^2$. Under headroom scaling, noise variance scales as $s$ ($\sigma_n^2 = s \bar{b} / N$), while signal power scales as $s^2$ ($\sigma_{f_{\text{scaled}}}^2 = s^2 \sigma_f^2$). The ratio scales as $s / s^2 = 1/s$:
+  $$K(N_{\text{eff}}) = \frac{\bar{b}}{s N \sigma_f^2} = \frac{\bar{b}}{N_{\text{eff}} \sigma_f^2} = \frac{1}{s} K_{\text{nominal}}$$
+  Because $N_{\text{eff}} = s N$, $K$ is inversely proportional to the effective photon budget.
+* **Why Deployable Parameters Were Kept Fixed:** In our experimental methodology, deployable configurations represent fixed, $a\ priori$ parameter choices made without ground-truth clean plate access ($K = 10^{-3}$, $\lambda = 10^{-3}$, $k = 20$). Adjusting $K$ post-hoc solely to make Wiener score better at low flux would violate the deployable evaluation protocol. At $N=1,000$ ($N_{\text{eff}}=700$), the true BSNR is only $\approx 17.5$ dB, so $K=10^{-3}$ severely under-regularizes (RMSE $0.2521$). The oracle sweep ($K \in \{10^{-4}, 10^{-3}, 10^{-2}\}$) demonstrates that selecting an appropriate $K=10^{-2}$ restores Wiener performance to $0.0928$ RMSE.
 
 Multi-seed evaluation across 10 independent random seeds (`seed=0..9`):
 
-| Photon Count $N$ | Degraded Input | Wiener (Deployable) | CLS (Deployable) | RL (Deployable, it=20) | Wiener (Oracle) | CLS (Oracle) | RL (Oracle) | Winner |
-|---|---|---|---|---|---|---|---|---|
-| **1,000 photons** | $0.1207 \pm 0.0045$ | $0.2521 \pm 0.0019$ | $0.0875 \pm 0.0011$ | **$0.0668 \pm 0.0037$** | $0.0928 \pm 0.0010$ | $0.0707 \pm 0.0019$ | **$0.0668 \pm 0.0037$** | **RL (+2.3 dB over CLS)** |
-| **5,000 photons** | $0.1184 \pm 0.0047$ | $0.1174 \pm 0.0008$ | $0.0554 \pm 0.0011$ | **$0.0560 \pm 0.0045$** | $0.0627 \pm 0.0011$ | $0.0554 \pm 0.0011$ | **$0.0504 \pm 0.0040$** | **RL (by +0.8 dB)** |
-| **20,000 photons** | $0.1180 \pm 0.0047$ | $0.0641 \pm 0.0006$ | **$0.0470 \pm 0.0014$** | $0.0537 \pm 0.0047$ | $0.0546 \pm 0.0013$ | $0.0470 \pm 0.0014$ | **$0.0441 \pm 0.0047$** | **RL Oracle / CLS Deployable** |
+| Nominal Flux $N$ | Effective Flux $N_{\text{eff}}$ | Degraded Input | Wiener (Deployable, $K=10^{-3}$) | CLS (Deployable, $\lambda=10^{-3}$) | RL (Deployable, $k=20$) | Wiener (Oracle) | CLS (Oracle) | RL (Oracle) | Relative Performance |
+|---|---|---|---|---|---|---|---|---|---|
+| **1,000 photons** | **700 photons** | $0.1207 \pm 0.0045$ | $0.2521 \pm 0.0019$ | $0.0875 \pm 0.0011$ | **$0.0668 \pm 0.0037$** | $0.0928 \pm 0.0010$ | $0.0707 \pm 0.0019$ | **$0.0668 \pm 0.0037$** | **RL Deployable wins (+2.3 dB over CLS)** |
+| **5,000 photons** | **3,500 photons** | $0.1184 \pm 0.0047$ | $0.1174 \pm 0.0008$ | **$0.0554 \pm 0.0011$** | $0.0560 \pm 0.0045$ | $0.0627 \pm 0.0011$ | $0.0554 \pm 0.0011$ | **$0.0504 \pm 0.0040$** | **CLS Deployable / RL Oracle** |
+| **20,000 photons** | **14,000 photons** | $0.1180 \pm 0.0047$ | $0.0641 \pm 0.0006$ | **$0.0470 \pm 0.0014$** | $0.0537 \pm 0.0047$ | $0.0546 \pm 0.0013$ | $0.0470 \pm 0.0014$ | **$0.0441 \pm 0.0047$** | **CLS Deployable wins (+1.1 dB over RL)** |
 
 ##### 3.3 Methodology 2: Unconstrained Photon-Count Domain RL (10 Seeds, Theoretical Reference):
 As a secondary theoretical benchmark, RL was executed directly on unbounded integer counts $C \sim \operatorname{Poisson}(N \cdot b)$ without headroom scaling:
 $$f_{\text{count}}^{(k+1)} = f_{\text{count}}^{(k)} \odot \frac{H^T \left[ \frac{C}{\max(Hf_{\text{count}}^{(k)}, \varepsilon)} \right]}{H^T \mathbf{1}}, \qquad \hat{f} = \operatorname{clip}(f_{\text{count}} / N, 0.0, 1.0)$$
 
+*Effective Budget Note & Non-Like-for-Like Comparison:*
+This reference experiment operates directly with rate $\lambda = N \cdot b$, so its effective photon budget is $N$ ($1,000, 5,000, 20,000$).
+Because the headroom experiment has effective budget $N_{\text{eff}} = s_{\text{scale}} N$ ($700, 3,500, 14,000$), this unconstrained count benchmark possesses a $1 / s_{\text{scale}} \approx 1.43\times$ higher photon count. It is a theoretical reference ceiling, **not a like-for-like comparison at the same nominal label**.
+
 Results across 10 random seeds (`seed=0..9`):
-* **1,000 photons:** Degraded: $0.1199 \pm 0.0047$ | Deployable RL ($k=20$): **$0.0630 \pm 0.0039$** | Oracle RL: **$0.0623 \pm 0.0037$**
-* **5,000 photons:** Degraded: $0.1183 \pm 0.0047$ | Deployable RL ($k=20$): **$0.0551 \pm 0.0046$** | Oracle RL: **$0.0479 \pm 0.0043$**
-* **20,000 photons:** Degraded: $0.1179 \pm 0.0047$ | Deployable RL ($k=20$): **$0.0535 \pm 0.0047$** | Oracle RL: **$0.0435 \pm 0.0048$**
+* **1,000 nominal photons (Effective flux 1,000):** Degraded: $0.1199 \pm 0.0047$ | Deployable RL ($k=20$): **$0.0630 \pm 0.0039$** | Oracle RL ($k=20$): **$0.0623 \pm 0.0037$**
+* **5,000 nominal photons (Effective flux 5,000):** Degraded: $0.1183 \pm 0.0047$ | Deployable RL ($k=20$): **$0.0551 \pm 0.0046$** | Oracle RL ($k=30$): **$0.0479 \pm 0.0043$**
+* **20,000 nominal photons (Effective flux 20,000):** Degraded: $0.1179 \pm 0.0047$ | Deployable RL ($k=20$): **$0.0535 \pm 0.0047$** | Oracle RL ($k=50$): **$0.0435 \pm 0.0048$**
 
 *API Limitation Note:* Raw normalized counts $C / N$ exceed $1.0$ (up to $1.1390$) and cannot be consumed by the public filter APIs (`richardson_lucy_filter`, `wiener_filter`, `cls_filter`) due to the $[0, 1]$ range contract enforced by `validate_image`.
 
 ##### 3.4 Summary of Poisson Findings:
-Under genuine, unclipped Poisson noise, Richardson–Lucy **decisively outperforms both Wiener and CLS filtering** across both deployable and oracle configurations (by $+2.3$ dB at low flux), validating its theoretical Poisson maximum-likelihood foundation.
+The Poisson noise experiments demonstrate that algorithm superiority is **conditional on the photon flux regime**:
+1. **Low Photon Flux ($N=1,000, N_{\text{eff}}=700$):**
+   Richardson–Lucy decisively outperforms both CLS and Wiener filtering (RL Deployable RMSE $0.0668$ vs CLS Deployable $0.0875$, a $+2.3$ dB gain). At low photon counts, Poisson shot noise deviates strongly from Gaussian statistics, and RL's Poisson log-likelihood model with natural non-negativity constraint provides superior restoration.
+2. **Moderate to High Photon Flux ($N=5,000$ and $20,000, N_{\text{eff}}=3,500$ and $14,000$):**
+   By the Central Limit Theorem, high-count Poisson noise approaches an additive Gaussian distribution ($\operatorname{Poisson}(\lambda) \approx \mathcal{N}(\lambda, \lambda)$). In this regime, Constrained Least Squares (CLS) deployable achieves lower RMSE than fixed-iteration Richardson–Lucy ($0.0554$ vs $0.0560$ at $N=5,000$; $0.0470$ vs $0.0537$ at $N=20,000$).
+3. **Semi-Convergence Sensitivity of Fixed-Iteration RL:**
+   Unregularised RL requires tuning iteration count to the noise level: $k=20$ is optimal at low flux ($N=1,000$), but under-iterates at high flux ($N=20,000$), where RL Oracle requires $50$ iterations to reach $0.0441$. CLS's explicit Laplacian smoothness prior ($\lambda |C|^2$) suppresses high-frequency noise across plate interiors in a single direct pass without iteration tuning.
 
 ---
 
@@ -2535,7 +2575,18 @@ Under circular convolution without spatial windowing, $s(x, y) \equiv \sum h$. I
 *Answer:* Poisson observations $C \sim \operatorname{Poisson}(\lambda)$ have support on all non-negative integers $\mathbb{N}_0$. At pixels with maximum plate intensity ($b=1.0$), $\lambda = N$. Because Poisson fluctuations are symmetric around $N$ for large flux, roughly $50\%$ of white pixels have $C > N$, meaning normalized counts $C / N > 1.0$. On synthetic plates where white background covers $48.7\%$ of pixels, $24.34\%$ of all image pixels exceed $1.0$ (up to $1.1390$). Forcing them into $[0, 1]$ via `clip_unit_interval` introduces a negative photometric bias ($-0.0125$) and truncates $66.79\%$ of the white-pixel noise variance, acting as an artificial non-linear noise filter that misrepresents algorithm performance.
 
 **Q: How does calibrated headroom scaling reconcile the $[0, 1]$ API contract with unbounded Poisson noise?**
-*Answer:* Real cameras avoid ADC saturation by exposing scenes with headroom below full-well capacity. By scaling the latent scene by $s_{\text{scale}} = 0.70$, the maximum expected count is $0.70 N$. The margin to full scale ($1.0$) is $(1.0 - 0.70) N / \sqrt{0.70 N} \approx 11.3\sigma$ at $N=1,000$. The probability of any pixel exceeding $1.0$ is $< 10^{-28}$, guaranteeing that normalized counts $C / N$ strictly lie in $[0, 1]$ with zero clipping. Because the Richardson–Lucy multiplicative ratio $\frac{s g}{s Hf} = \frac{g}{Hf}$ is scale invariant, headroom scaling preserves genuine Poisson statistics and exact deconvolution dynamics while allowing direct, compliant invocation of public filter APIs.
+*Answer:* Real optical sensors avoid saturation by exposing scenes with headroom below full-well capacity. By scaling the latent scene by $s_{\text{scale}} = 0.70$, the maximum expected count at nominal flux $N=1,000$ is $\mu = 700$, providing an $11.33\sigma$ headroom margin below the $1.0$ saturation threshold. By the Chernoff bound, the per-pixel exceedance probability is $P(C > N) \le 2.3 \times 10^{-25}$, and the frame exceedance probability is $\le 7.4 \times 10^{-21}$ for a $96 \times 336$ license plate.
+Unlike naive clipping, raw observations are strictly unclipped: if any pixel exceeds $[0, 1]$, the trial is failed explicitly via a `RuntimeError` rather than silently truncated. Final unit-interval clipping (`clip_unit_interval`) is applied only to the post-restoration rescaled estimate. Because the Richardson–Lucy multiplicative ratio $\frac{s g}{s Hf} = \frac{g}{Hf}$ is scale invariant, headroom scaling preserves exact Poisson deconvolution dynamics while allowing direct, compliant invocation of public filter APIs.
+
+**Q: How does headroom scaling affect the effective photon budget, and why is direct count RL not a like-for-like comparison?**
+*Answer:* For observation $g = C / N$ with $C \sim \operatorname{Poisson}(N s b)$, the expected value is $\mathbb{E}[g] = s b$ and variance is $\operatorname{Var}(g) = s b / N$. Dividing the reconstructed estimate by $s$ maps the variance to $\operatorname{Var}(g / s) = b / (N s) = b / N_{\text{eff}}$. Therefore, headroom scaling changes the effective photon budget to $N_{\text{eff}} = s \cdot N$ (700, 3,500, and 14,000 photons for nominal budgets 1,000, 5,000, and 20,000).
+The unconstrained count-domain RL benchmark directly draws $C \sim \operatorname{Poisson}(N b)$ where the effective budget is full nominal $N$ ($1,000, 5,000, 20,000$). Consequently, the direct count benchmark operates at a $1 / s = 1.43\times$ higher photon count than the headroom-scaled experiment at the same nominal label, serving as an unconstrained theoretical reference ceiling rather than a direct like-for-like comparison.
+
+**Q: Does CLS regularization or Wiener $K$ require recalibration under headroom scaling?**
+*Answer:*
+1. *CLS Filter:* In the Lagrangian objective $\min_f \|g - Hf\|^2 + \lambda \|Cf\|^2$, uniform scaling $g \to s g$ scales both the residual and roughness penalty by $s^2$, causing the minimizer to scale linearly as $s f^*$. Dividing by $s$ post-hoc exactly recovers $f^*$. Therefore, CLS regularization $\lambda$ is strictly scale-invariant and requires no recalibration.
+2. *Wiener Filter:* The regularizer $K$ represents the noise-to-signal ratio $\sigma_n^2 / \sigma_f^2$. Under headroom scaling, $\sigma_n^2$ scales as $s$ while signal variance scales as $s^2$, so their ratio scales as $1/s$: $K(N_{\text{eff}}) = \frac{\bar{b}}{N_{\text{eff}} \sigma_f^2} = \frac{1}{s} K_{\text{nominal}}$.
+In our benchmark, deployable parameters are chosen $a\ priori$ and kept static across noise sweeps ($K = 10^{-3}$, $\lambda = 10^{-3}$, $k = 20$). Recalibrating $K$ post-hoc solely to boost Wiener's score at low flux would violate the deployable evaluation discipline. The oracle sweep ($K \in \{10^{-4}, 10^{-3}, 10^{-2}\}$) demonstrates how tuning $K$ to the noise level recovers performance (reducing Wiener RMSE from $0.2521$ to $0.0928$ at 1,000 photons).
 
 ---
 
@@ -2591,10 +2642,27 @@ Under circular convolution without spatial windowing, $s(x, y) \equiv \sum h$. I
 1. **Audit and Quantification of Clipping Defect:**
    Quantified that Stage 4.5's `clip_unit_interval(counts / photons)` clipped 24.34% of image pixels (up to $1.1390$), introducing a $-0.0125$ negative bias and truncating 66.79% of white-pixel variance. Retained superseded results under `superseded_clipped_stage4_5` with explicit status markings.
 2. **Corrected Headroom Scaling Methodology (10 Seeds, Public API):**
-   Implemented calibrated photometric headroom scaling ($s_{\text{scale}} = 0.70$), providing $> 11\sigma$ margin below sensor saturation ($P(C > N) < 10^{-28}$) and eliminating clipping entirely while remaining 100% compliant with public API filters (`richardson_lucy_filter`, `wiener_filter`, `cls_filter`).
+   Implemented calibrated photometric headroom scaling ($s_{\text{scale}} = 0.70$), providing $> 11\sigma$ margin below sensor saturation ($P(\text{frame exceedance}) \le 7.4 \times 10^{-21}$) and eliminating clipping while remaining compliant with public API filters (`richardson_lucy_filter`, `wiener_filter`, `cls_filter`).
 3. **Unconstrained Count-Domain Reference Benchmark (10 Seeds):**
    Implemented direct photon-count domain RL reference benchmark on raw integer counts $C \sim \operatorname{Poisson}(N b)$. Explicitly documented the API limitation that raw counts cannot be consumed by public filters due to `validate_image`'s $[0, 1]$ contract.
 4. **Multi-Seed Statistical Reporting:**
-   Evaluated all experiments across 10 random seeds (`seed=0..9`), reporting mean, std, min, and max for both deployable configurations and oracle benchmarks. RL decisively outperforms Wiener and CLS across both deployable and oracle configurations under Poisson statistics.
-5. **Full Repository Regression Testing:**
-   Confirmed that restoration algorithms and public contracts were preserved without modification. Full test suite: **444 passed, 6 skipped (0 regressions)**.
+   Evaluated all experiments across 10 random seeds (`seed=0..9`), reporting mean, std, min, and max for both deployable configurations and oracle benchmarks.
+
+### 20.4 Phase 4.5.3 Poisson Experiment Final Consistency Audit Log
+
+* **Date**: November 2026
+* **Commit**: `fix(experiments): clarify Poisson photon budget and results`
+* **Author**: Ashish (2026909001)
+
+#### Corrective engineering and reporting actions:
+
+1. **Effective Photon-Budget Correction:**
+   Proved mathematically that scaling by $s_{\text{scale}} = 0.70$ results in an observation variance of $\operatorname{Var}(g / s) = b / (N s)$, establishing that the effective photon budget is $N_{\text{eff}} = s \cdot N$ (700, 3,500, and 14,000 photons for nominal budgets 1,000, 5,000, and 20,000). Corrected all documentation claiming headroom scaling preserves the original photon budget. Clarified that the unconstrained count benchmark operates at full nominal flux $N$ ($1.43\times$ higher flux), making it a theoretical reference rather than a like-for-like comparison at the same nominal label.
+2. **Qualified Rare-Event & Clipping Handling:**
+   Replaced absolute claims ("guaranteed zero clipping", "100% zero clipping") with mathematically sound probability bounds ($P(C \ge N) \le 2.3 \times 10^{-25}$ per pixel, $P(\text{frame exceedance}) \le 7.4 \times 10^{-21}$ at $N=1,000$ under an $11.33\sigma$ margin). Replaced bare assertions in `run_poisson_noise_experiment` with explicit trial verification that raises `RuntimeError` on exceedance without silent truncation. Maintained conceptual separation between raw observation validation and post-restoration unit-interval clipping (`clip_unit_interval`).
+3. **Wiener & CLS Parameter Audit:**
+   Derived that CLS regularization $\lambda$ is strictly scale-invariant under uniform amplitude scaling, requiring no adjustment. Proved that Wiener $K$ scales inversely with $N_{\text{eff}}$ ($K(N_{\text{eff}}) = \frac{1}{s} K_{\text{nominal}}$). Confirmed that deployable parameters must remain $a\ priori$ fixed across flux levels ($K=10^{-3}, \lambda=10^{-3}, k=20$) rather than post-hoc tuned, while oracle sweeps reflect the noise-adapted performance ceiling.
+4. **Authoritative Results Reconciliation:**
+   Reconciled discrepancies between earlier handover text and committed JSON: confirmed authoritative 1,000-photon degraded RMSE is $0.1207 \pm 0.0045$ (not $0.2312$). Corrected broad claims of universal RL superiority: documented that while RL wins decisively at low flux ($N=1,000, N_{\text{eff}}=700$), CLS Deployable outperforms fixed-iteration ($k=20$) RL at moderate and high flux ($N=5,000$ and $20,000$).
+5. **Full Repository Verification:**
+   Confirmed zero modifications to restoration algorithms or tests. Full test suite: **444 passed, 6 skipped (0 regressions)**. Zero whitespace warnings under `git diff --check`.

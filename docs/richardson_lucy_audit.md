@@ -121,11 +121,12 @@ The hardened implementation correctly performs sensitivity normalisation ($s = H
   2. *Large Blur (51×51) under Gaussian Noise:*
      * Convergence is slow: 100 iterations achieves $0.2312$ RMSE, whereas CLS achieves $0.1512$ in a single pass.
      * Runtime for 100 iterations is $\sim 174$ ms, compared to $\sim 2$ ms for CLS.
-  3. *Poisson Noise Model (Native RL Likelihood):*
-     * Evaluated under genuine Poisson photon counting noise at 1,000, 5,000, and 20,000 photons.
-     * At 1,000 photons: RL achieves $5.175\times 10^{-2}$ RMSE (oracle) and $5.371\times 10^{-2}$ (deployable), decisively outperforming Wiener ($7.196\times 10^{-2}$ oracle, $1.529\times 10^{-1}$ deployable) and CLS ($6.618\times 10^{-2}$).
-     * At 5,000 photons: RL achieves $3.858\times 10^{-2}$ RMSE (oracle) and $4.687\times 10^{-2}$ (deployable), beating Wiener ($5.678\times 10^{-2}$) and CLS ($5.014\times 10^{-2}$).
-* **Resolution:** Successfully established noise-model dependency. RL is superior on Poisson data and localized blurs, while CLS is superior on severe Gaussian blurs.
+  3. *Poisson Noise Model (Native RL Likelihood, 10 Seeds):*
+     * Evaluated under genuine Poisson observation noise with calibrated headroom scaling ($s_{\text{scale}}=0.70$, effective photon budgets $N_{\text{eff}} = 700, 3,500, 14,000$).
+     * At 1,000 nominal photons ($N_{\text{eff}}=700$): RL Deployable ($0.0668 \pm 0.0037$) and Oracle ($0.0668 \pm 0.0037$) decisively outperform CLS Deployable ($0.0875 \pm 0.0011$) and Wiener Deployable ($0.2521 \pm 0.0019$).
+     * At 5,000 nominal photons ($N_{\text{eff}}=3,500$): CLS Deployable ($0.0554 \pm 0.0011$) outperforms RL Deployable ($0.0560 \pm 0.0045$), while RL Oracle reaches $0.0504 \pm 0.0040$.
+     * At 20,000 nominal photons ($N_{\text{eff}}=14,000$): CLS Deployable ($0.0470 \pm 0.0014$) decisively outperforms RL Deployable ($0.0537 \pm 0.0047$), while RL Oracle reaches $0.0441 \pm 0.0047$.
+* **Resolution:** Established conditional noise-model dependency. RL is superior at low photon flux where shot noise dominates and non-negativity is critical. At moderate-to-high flux, where Poisson noise approaches Gaussian by the Central Limit Theorem, CLS Deployable with its Laplacian smoothness prior outperforms fixed-iteration ($k=20$) RL.
 
 #### Finding D.2: Oracle vs. Deployable Selection Transparency
 * **Severity:** Major (Corrected in Stage 4.5.1)
@@ -135,7 +136,7 @@ The hardened implementation correctly performs sensitivity normalisation ($s = H
   * *Oracle benchmarks:* Swept hyper-parameters against ground-truth clean plate to measure theoretical performance upper bound.
 * **Resolution:** Fully transparent in code, console logs, and documentation.
 
-#### Finding D.3: Poisson Simulation Upper-Tail Truncation & Calibrated Headroom Scaling (Stage 4.5.2)
+#### Finding D.3: Poisson Simulation Upper-Tail Truncation, Headroom Scaling & Effective Budget (Stage 4.5.2 & 4.5.3)
 * **Severity:** Critical (Audited and Corrected in Stage 4.5.2)
 * **File:** `experiments/run_richardson_lucy_experiment.py`, `experiments/richardson_lucy_experiment_results.json`
 * **Original Defect (Stage 4.5):** Poisson observations were simulated via `counts = rng.poisson(photons * blurred)` and clipped to $[0, 1]$ via `clip_unit_interval(counts / photons)`. Because Poisson distributions are unbounded above, observations naturally fluctuate above the nominal count at bright pixels.
@@ -143,12 +144,14 @@ The hardened implementation correctly performs sensitivity normalisation ($s = H
   * *Exceeding Pixels:* At $N=1,000$ photons, exactly **$7,851$ pixels (24.34%)** exceeded $1.0$, reaching values up to $1.1390$.
   * *Photometric Bias:* On white background pixels ($n=15,400$), clipping introduced a systematic negative bias of **$-0.0125$** (mean reduced from $1.00025$ to $0.98751$).
   * *Severe Variance Truncation:* Truncating the upper tail eliminated $66.79\%$ of the white-pixel noise variance ($3.321\times 10^{-4}$ vs theoretical $1.000\times 10^{-3}$), acting as an artificial non-linear noise filter that flattered Stage 4.5 restoration scores.
-* **API Contract & Methodological Correction:**
-  * The public restoration API (`validate_image`) strictly enforces input values in $[0, 1]$. Direct normalized counts $C / N$ exceed $1.0$ and cannot be consumed by public filters without either clipping (the defect) or scaling.
-  * *Methodology 1 (Calibrated Headroom Scaling, 10 Seeds, Public API):* Modeled physical sensor exposure with calibrated headroom $s_{\text{scale}} = 0.70$ (leaving $> 11\sigma$ margin below sensor saturation at $N=1,000$ photons). The observation $g_{\text{obs}} = C / N \in [0, 1]$ is strictly unclipped ($P(C > N) < 10^{-28}$) and consumed directly by `richardson_lucy_filter`, `wiener_filter`, and `cls_filter`. Output is rescaled by $1 / s_{\text{scale}}$. RL Deployable achieves $0.0668 \pm 0.0037$ RMSE vs CLS Deployable $0.0875 \pm 0.0011$ (RL wins by $+2.3$ dB).
-  * *Methodology 2 (Unconstrained Count-Domain RL, 10 Seeds, Theoretical Reference):* Directly iterates on raw integer counts $C \sim \operatorname{Poisson}(N b)$ in the photon-count domain without headroom scaling. Deployable RL achieves $0.0630 \pm 0.0039$ RMSE. Explicitly documented that this reference cannot be consumed by the public API filters due to `validate_image`'s $[0, 1]$ contract.
+* **Methodological Hardening & Consistency Reconciliation (Stage 4.5.3):**
+  * *Effective Photon Budget:* The observation in the original scale is $g / s = C / (N s)$, which has variance $\operatorname{Var}(g / s) = b / (N s)$, so the effective photon budget is $N_{\text{eff}} = s \cdot N$ ($700, 3,500, 14,000$ photons for nominal $1,000, 5,000, 20,000$). Headroom scaling preserves RL's multiplicative ratio scale invariance, while changing the effective photon budget.
+  * *Probabilistic Exceedance Bound:* Setting $s_{\text{scale}} = 0.70$ establishes an $11.33\sigma$ margin below saturation at nominal $N=1,000$. By the Chernoff bound, per-pixel exceedance is $P(C \ge N) \le 2.3 \times 10^{-25}$, and frame exceedance is $P(\text{frame exceedance}) \le 7.4 \times 10^{-21}$.
+  * *Raw vs. Output Clipping Separation:* Raw observations are strictly unclipped; any trial exceeding range raises an explicit `RuntimeError` and halts. Final unit-interval clipping (`clip_unit_interval`) applies strictly and only to the post-restoration rescaled estimate.
+  * *Wiener & CLS Parameter Audit:* Proved that CLS regularization $\lambda$ is strictly scale invariant, while Wiener $K$ scales as $1/s$. Fixed deployable parameters ($K=10^{-3}, \lambda=10^{-3}, k=20$) are preserved to avoid post-hoc tuning.
+  * *Count-Domain Reference Benchmark:* Uses $C \sim \operatorname{Poisson}(N b)$ where the effective budget is $N$ ($1.43\times$ higher flux than the headroom study), serving as an unconstrained theoretical reference rather than a like-for-like comparison at the same nominal label.
   * *Traceability:* Stage 4.5 single-seed clipped results are retained under `superseded_clipped_stage4_5` with explicit status markings.
-* **Resolution:** Corrected, audited, and verified across 10 random seeds.
+* **Resolution:** Fully verified, audited, and documented across 10 random seeds.
 
 ---
 
@@ -177,7 +180,8 @@ The hardened implementation correctly performs sensitivity normalisation ($s = H
 | 6 | Unit and regression tests | `tests/test_richardson_lucy.py` | Expanded test suite to 68 tests covering sensitivity, tapering, and resolutions. |
 | 7 | Transparent experiment benchmarking | `experiments/run_richardson_lucy_experiment.py` | Added deployable vs oracle reporting across Gaussian and Poisson studies. |
 | 8 | Foundation documentation & Viva prep | `docs/restoration_foundation.md` | Documented sensitivity derivation, Option B rationale, deployable vs oracle, and Viva Q&A. |
-| 9 | Poisson upper-tail clipping audit & headroom scaling | `experiments/run_richardson_lucy_experiment.py`, `docs/restoration_foundation.md` | Quantified 24.3% clipping defect; implemented unclipped headroom scaling ($s_{\text{scale}}=0.70$) across 10 seeds and count-domain reference benchmark. |
+| 9 | Poisson upper-tail clipping audit & headroom scaling | `experiments/run_richardson_lucy_experiment.py`, `docs/restoration_foundation.md` | Quantified 24.3% clipping defect; implemented headroom scaling ($s_{\text{scale}}=0.70$) across 10 seeds and count-domain reference benchmark. |
+| 10 | Poisson experiment consistency audit & effective budget reconciliation | `experiments/run_richardson_lucy_experiment.py`, `docs/restoration_foundation.md`, `docs/richardson_lucy_audit.md` | Derived effective budget $N_{\text{eff}} = s N$ ($700, 3500, 14000$); qualified exceedance probability ($11.33\sigma, P \le 7.4 \times 10^{-21}$); audited Wiener/CLS parameter scaling; reconciled results to match committed JSON; documented conditional comparative performance. |
 
 ---
 

@@ -190,17 +190,39 @@ def run_poisson_noise_experiment(seeds: list[int], psf: np.ndarray,
                                  s_scale: float = 0.70) -> dict:
     """Evaluate RL, Wiener, and CLS under genuine Poisson observation noise.
 
-    Uses calibrated photometric headroom scaling (s_scale=0.70) so that genuine
+    Uses calibrated photometric headroom scaling (s_scale=0.70) so that
     Poisson count realizations C ~ Poisson(photons * s_scale * blurred)
-    strictly satisfy the public API image contract (values in [0, 1]) without
-    a single pixel clipped (headroom > 11 sigma below full scale at 1000 photons).
+    strictly satisfy the public API image contract (values in [0, 1])
+    with an exceedance probability upper-bounded by P(C > N) <= 2.3e-25 per pixel
+    and P(frame > 1.0) <= 7.4e-21 per 96x336 frame (11.3 sigma headroom at N=1000).
 
-    Evaluated across multiple random seeds, reporting mean and std for both:
+    Effective Photon Budget:
+    Because g = C / photons has E[g] = s * b and Var(g) = (s * b) / photons,
+    dividing the reconstructed estimate by s scales the effective observation
+    variance to Var(g / s) = b / (photons * s). Thus, the effective photon budget
+    is N_eff = photons * s_scale, NOT nominal photons.
+    Nominal photons (1000, 5000, 20000) correspond to effective budgets:
+      * 1,000 nominal -> 700 effective photons
+      * 5,000 nominal -> 3,500 effective photons
+      * 20,000 nominal -> 14,000 effective photons
+
+    Rare-Event & Clipping Policy:
+    * Raw Poisson observations are NEVER silently clipped.
+    * Each observation array is explicitly verified: if any pixel falls outside
+      [0.0, 1.0], a descriptive RuntimeError is raised to fail that trial clearly.
+    * Final unit-interval clipping (clip_unit_interval) applies strictly and
+      only to the post-restoration rescaled estimate (estimate / s_scale).
+
+    Evaluated across multiple random seeds, reporting mean, std, min, and max for:
     * Deployable configurations: fixed parameters chosen a priori (K=1e-3, lambda=1e-3, iters=20);
     * Oracle benchmarks: parameters swept and selected against ground-truth clean plate.
     """
+    effective_budgets = {str(p): int(round(p * s_scale)) for p in photon_fluxes}
     results_by_flux = {}
+    trials_failed = 0
+
     for photons in photon_fluxes:
+        n_eff = effective_budgets[str(photons)]
         records = {
             "degraded": [],
             "wiener_deployable": [],
@@ -216,7 +238,18 @@ def run_poisson_noise_experiment(seeds: list[int], psf: np.ndarray,
             rng = np.random.default_rng(200 + s)
             counts = rng.poisson(photons * s_scale * np.clip(blurred, 0.0, 1.0))
             obs = (counts / photons).astype(np.float32)
-            assert float(obs.max()) <= 1.0 and float(obs.min()) >= 0.0
+
+            max_obs = float(obs.max())
+            min_obs = float(obs.min())
+            if max_obs > 1.0 or min_obs < 0.0:
+                trials_failed += 1
+                raise RuntimeError(
+                    f"Poisson observation realization exceeded public API range [0, 1] "
+                    f"(min={min_obs:.6f}, max={max_obs:.6f}, nominal_flux={photons}, "
+                    f"effective_flux={n_eff}, seed={s}). Unbounded Poisson fluctuations "
+                    "cannot be represented in a bounded [0, 1] API without silent truncation. "
+                    "Trial halted to prevent unphysical clipping."
+                )
 
             # Degraded observation scaled back
             deg_rescaled = np.clip(obs / s_scale, 0.0, 1.0)
@@ -259,10 +292,16 @@ def run_poisson_noise_experiment(seeds: list[int], psf: np.ndarray,
         "metadata": {
             "model": "Calibrated Photometric Headroom Scaling (Unclipped Poisson)",
             "s_scale": s_scale,
-            "clipping_policy": "Zero clipping; observations strictly within [0, 1] via headroom scaling",
+            "nominal_photon_fluxes": photon_fluxes,
+            "effective_photon_fluxes": [int(round(p * s_scale)) for p in photon_fluxes],
+            "effective_budget_mapping": effective_budgets,
+            "effective_variance_derivation": "Var(g/s) = b / (photons * s) = b / N_eff; effective photon budget is N_eff = photons * s_scale",
+            "exceedance_probability_bound": "< 2.3e-25 per pixel, < 7.4e-21 per 96x336 frame at nominal 1000 photons under s=0.70 (11.3 sigma margin)",
+            "exceedance_trials_failed": trials_failed,
+            "clipping_policy": "Zero clipping on raw observation input. Realizations are strictly verified in [0, 1]; trials exceeding range raise a RuntimeError. Final unit-interval clipping applies only to rescaled restored estimate.",
+            "api_limitation_note": "A bounded [0, 1] public API cannot represent unbounded Poisson distributions without either headroom scaling (which reduces effective photon budget to s*N) or silent upper-tail truncation (which introduces negative bias and cuts variance).",
             "margin": 12,
             "seeds": seeds,
-            "photon_fluxes": photon_fluxes,
         },
         "results": results_by_flux,
     }
@@ -273,7 +312,16 @@ def run_unbounded_count_poisson_experiment(seeds: list[int], psf: np.ndarray,
     """Evaluate RL directly on unbounded integer photon counts C ~ Poisson(photons * blurred).
 
     This provides an unconstrained theoretical count-domain benchmark.
-    Note: Raw normalized counts C / photons exceed 1.0 (up to 1.14) and cannot be
+
+    Effective Budget & Comparison Note:
+    This experiment operates at full nominal photon count N (1000, 5000, 20000).
+    Because the headroom-scaled experiment operates at effective photon budget
+    N_eff = s * N = 700, 3500, 14000, this direct count benchmark has a 1 / s = 1.43x
+    higher effective photon budget. It is a theoretical reference rather than a
+    like-for-like comparison at the same nominal label.
+
+    API Limitation:
+    Raw normalized counts C / photons exceed 1.0 (up to 1.14) and cannot be
     consumed by the public API filters (richardson_lucy_filter, wiener_filter,
     cls_filter) due to the [0, 1] range contract in validate_image.
     """
@@ -323,6 +371,8 @@ def run_unbounded_count_poisson_experiment(seeds: list[int], psf: np.ndarray,
     return {
         "metadata": {
             "model": "Unconstrained Photon-Count Domain (Raw Integer Counts)",
+            "effective_photon_fluxes": photon_fluxes,
+            "like_for_like_comparison_note": "Direct count-domain experiment uses C ~ Poisson(N * b) where effective budget is N (1000, 5000, 20000), which is 1/s = 1.43x higher than the headroom experiment's effective budget N_eff = s*N (700, 3500, 14000). Thus direct count study is a theoretical reference benchmark, not a like-for-like comparison at the same nominal label.",
             "clipping_policy": "Unbounded counts during iteration; unit interval clipping applied only to final normalized output",
             "api_limitation_note": "Requires separate count-domain iteration; cannot be passed to public API filters due to [0, 1] input contract in validate_image",
             "margin": 12,
@@ -435,21 +485,22 @@ def main() -> None:
               f"White Bias={b_wh:.4f} | Var Red={v_red:.1f}%")
 
     # 4. Corrected Poisson noise study: Calibrated Headroom Scaling (10 seeds)
-    print("\n[4] Running Corrected Poisson Study via Calibrated Headroom Scaling (10 seeds)...")
+    print("\n[4] Running Corrected Poisson Study via Calibrated Headroom Scaling (10 seeds, s=0.70)...")
     headroom_poisson = run_poisson_noise_experiment(seeds, kernels["7x7"],
                                                     [1000, 5000, 20000], s_scale=0.70)
     for photons, p_data in headroom_poisson["results"].items():
-        print(f"  Photons={photons:>5s}:")
+        n_eff = int(round(int(photons) * 0.70))
+        print(f"  Nominal Photons={photons:>5s} (Effective N_eff={n_eff:>5d}):")
         print(f"    Degraded:          RMSE = {p_data['degraded']['mean']:.4e} +- {p_data['degraded']['std']:.2e}")
         print(f"    Deployable: Wiener={p_data['wiener_deployable']['mean']:.4e} | CLS={p_data['cls_deployable']['mean']:.4e} | RL={p_data['rl_deployable']['mean']:.4e}")
         print(f"    Oracle:     Wiener={p_data['wiener_oracle']['mean']:.4e} | CLS={p_data['cls_oracle']['mean']:.4e} | RL={p_data['rl_oracle']['mean']:.4e}")
 
     # 5. Direct unbounded photon-count RL benchmark (10 seeds)
-    print("\n[5] Running Direct Unbounded Photon-Count RL Benchmark (10 seeds)...")
+    print("\n[5] Running Direct Unbounded Photon-Count RL Benchmark (10 seeds, reference only)...")
     unbounded_poisson = run_unbounded_count_poisson_experiment(seeds, kernels["7x7"],
                                                                [1000, 5000, 20000])
     for photons, u_data in unbounded_poisson["results"].items():
-        print(f"  Photons={photons:>5s}: Deployable RL={u_data['rl_deployable']['mean']:.4e} +- {u_data['rl_deployable']['std']:.2e} | "
+        print(f"  Effective Photons={photons:>5s} (Reference): Deployable RL={u_data['rl_deployable']['mean']:.4e} +- {u_data['rl_deployable']['std']:.2e} | "
               f"Oracle RL={u_data['rl_oracle']['mean']:.4e} +- {u_data['rl_oracle']['std']:.2e}")
 
     # 6. Retain superseded single-seed clipped results for traceability

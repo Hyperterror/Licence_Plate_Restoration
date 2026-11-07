@@ -13,56 +13,56 @@
             "mae": 0.03918061852897311,
             "psnr": 20.44542041420465,
             "iterations": 1,
-            "runtime_ms": 4.341599997133017
+            "runtime_ms": 4.606100032106042
           },
           {
             "rmse": 0.07061286526991416,
             "mae": 0.025440194606425933,
             "psnr": 23.022323314172954,
             "iterations": 5,
-            "runtime_ms": 14.2116000643
+            "runtime_ms": 15.062999911606312
           },
           {
             "rmse": 0.057490125002757526,
             "mae": 0.019439704023542045,
             "psnr": 24.808134941031174,
             "iterations": 10,
-            "runtime_ms": 25.355100049637258
+            "runtime_ms": 29.426899971440434
           },
           {
             "rmse": 0.0498611829242326,
             "mae": 0.016559853685013247,
             "psnr": 26.04474844710113,
             "iterations": 15,
-            "runtime_ms": 41.32110008504242
+            "runtime_ms": 41.64990002755076
           },
           {
             "rmse": 0.044826409821294926,
             "mae": 0.014685866198243093,
             "psnr": 26.969320853840753,
             "iterations": 20,
-            "runtime_ms": 50.387300085276365
+            "runtime_ms": 53.1655999366194
           },
           {
             "rmse": 0.03876298241191079,
             "mae": 0.012484746703914648,
             "psnr": 28.231656317045434,
             "iterations": 30,
-            "runtime_ms": 69.3548999261111
+            "runtime_ms": 85.5482000624761
           },
           {
             "rmse": 0.03339904224009902,
             "mae": 0.01074910147086411,
             "psnr": 29.52531973910037,
             "iterations": 50,
-            "runtime_ms": 121.0848999908194
+            "runtime_ms": 146.5319999260828
           },
           {
             "rmse": 0.029810650671710338,
             "mae": 0.009945208333548125,
             "psnr": 30.512570891927485,
             "iterations": 100,
-            "runtime_ms": 236.5057000424713
+            "runtime_ms": 272.3284000530839
           }
         ]
       },
@@ -78,56 +78,56 @@
             "mae": 0.042170009826545125,
             "psnr": 20.410813631817817,
             "iterations": 1,
-            "runtime_ms": 3.506300039589405
+            "runtime_ms": 3.6979999858886003
           },
           {
             "rmse": 0.07162140964138644,
             "mae": 0.029170282091569584,
             "psnr": 22.899142710478145,
             "iterations": 5,
-            "runtime_ms": 14.467700035311282
+            "runtime_ms": 12.925099930725992
           },
           {
             "rmse": 0.05946307579255483,
             "mae": 0.023874179621757724,
             "psnr": 24.515052603871,
             "iterations": 10,
-            "runtime_ms": 27.67619991209358
+            "runtime_ms": 26.669800048694015
           },
           {
             "rmse": 0.0529178863316906,
             "mae": 0.021593805994660497,
             "psnr": 25.527950218192533,
             "iterations": 15,
-            "runtime_ms": 39.63909996673465
+            "runtime_ms": 39.664399926550686
           },
           {
             "rmse": 0.04907628808761883,
             "mae": 0.02039306495612633,
             "psnr": 26.18256585615721,
             "iterations": 20,
-            "runtime_ms": 50.775099894963205
+            "runtime_ms": 45.58280005585402
           },
           {
             "rmse": 0.045573438595590064,
             "mae": 0.019646331578462673,
             "psnr": 26.825764038072148,
             "iterations": 30,
-            "runtime_ms": 73.49610002711415
+            "runtime_ms": 68.5875000199303
           },
           {
             "rmse": 0.045510678699800015,
             "mae": 0.020790798875122862,
             "psnr": 26.837733756415684,
             "iterations": 50,
-            "runtime_ms": 114.06149994581938
+            "runtime_ms": 104.3290999950841
           },
           {
             "rmse": 0.05253544260234513,
             "mae": 0.025186123961727258,
             "psnr": 25.59095209064875,
             "iterations": 100,
-            "runtime_ms": 215.8326000208035
+            "runtime_ms": 200.7121000206098
           }
         ]
       },
@@ -143,56 +143,56 @@
             "mae": 0.050090153496928615,
             "psnr": 20.04988380199623,
             "iterations": 1,
-            "runtime_ms": 4.420700017362833
+            "runtime_ms": 3.729499992914498
           },
           {
             "rmse": 0.07893717726167922,
             "mae": 0.03872896682241941,
             "psnr": 22.05436815460307,
             "iterations": 5,
-            "runtime_ms": 12.23629992455244
+            "runtime_ms": 10.284899966791272
           },
           {
             "rmse": 0.07164912798753126,
             "mae": 0.03572752669796234,
             "psnr": 22.895781817128373,
             "iterations": 10,
-            "runtime_ms": 22.486899979412556
+            "runtime_ms": 20.623299991711974
           },
           {
             "rmse": 0.07026119053833159,
             "mae": 0.035571758459655295,
             "psnr": 23.065689911874067,
             "iterations": 15,
-            "runtime_ms": 32.35819994006306
+            "runtime_ms": 31.957900035195053
           },
           {
             "rmse": 0.07145034226689133,
             "mae": 0.03656265018944015,
             "psnr": 22.91991372954805,
             "iterations": 20,
-            "runtime_ms": 34.069000044837594
+            "runtime_ms": 42.3714000498876
           },
           {
             "rmse": 0.07701805891465803,
             "mae": 0.03978456207676707,
             "psnr": 22.268148621893886,
             "iterations": 30,
-            "runtime_ms": 52.36289999447763
+            "runtime_ms": 63.540599890984595
           },
           {
             "rmse": 0.0909463244729837,
             "mae": 0.047042157990855114,
             "psnr": 20.824296958586462,
             "iterations": 50,
-            "runtime_ms": 84.02539999224246
+            "runtime_ms": 89.85460002440959
           },
           {
             "rmse": 0.12012294997963219,
             "mae": 0.06216961064731166,
             "psnr": 18.407480218747764,
             "iterations": 100,
-            "runtime_ms": 171.95240000728518
+            "runtime_ms": 187.55379994399846
           }
         ]
       }
@@ -210,56 +210,56 @@
             "mae": 0.2158650913384358,
             "psnr": 10.142747852786208,
             "iterations": 1,
-            "runtime_ms": 3.892000066116452
+            "runtime_ms": 5.087599973194301
           },
           {
             "rmse": 0.29820581974499416,
             "mae": 0.2030219061703259,
             "psnr": 10.509677703342987,
             "iterations": 5,
-            "runtime_ms": 11.01399993058294
+            "runtime_ms": 11.244899942539632
           },
           {
             "rmse": 0.28767880131527757,
             "mae": 0.1943262753274318,
             "psnr": 10.821842790764686,
             "iterations": 10,
-            "runtime_ms": 19.495700020343065
+            "runtime_ms": 22.314599948003888
           },
           {
             "rmse": 0.27966195974707947,
             "mae": 0.1877528947221964,
             "psnr": 11.067332066596789,
             "iterations": 15,
-            "runtime_ms": 26.226600049994886
+            "runtime_ms": 31.221000012010336
           },
           {
             "rmse": 0.2731181362802851,
             "mae": 0.18237963123404155,
             "psnr": 11.272989195672773,
             "iterations": 20,
-            "runtime_ms": 35.75279994402081
+            "runtime_ms": 44.61159999482334
           },
           {
             "rmse": 0.26294242556519193,
             "mae": 0.17386590470783356,
             "psnr": 11.602786702952299,
             "iterations": 30,
-            "runtime_ms": 50.71540002245456
+            "runtime_ms": 65.79869997221977
           },
           {
             "rmse": 0.24938454218141848,
             "mae": 0.16251026205597044,
             "psnr": 12.062609385502721,
             "iterations": 50,
-            "runtime_ms": 100.18469998613
+            "runtime_ms": 100.6941000232473
           },
           {
             "rmse": 0.2313253444668034,
             "mae": 0.1474635027437675,
             "psnr": 12.715535649033345,
             "iterations": 100,
-            "runtime_ms": 158.8939999928698
+            "runtime_ms": 208.24019995052367
           }
         ]
       },
@@ -275,56 +275,56 @@
             "mae": 0.21583424068778337,
             "psnr": 10.1431816528201,
             "iterations": 1,
-            "runtime_ms": 2.795299980789423
+            "runtime_ms": 2.7456999523565173
           },
           {
             "rmse": 0.2981786372321986,
             "mae": 0.2032776785738283,
             "psnr": 10.510469488922336,
             "iterations": 5,
-            "runtime_ms": 9.90760000422597
+            "runtime_ms": 9.936499991454184
           },
           {
             "rmse": 0.28765429359541694,
             "mae": 0.19465922963129476,
             "psnr": 10.822582784177206,
             "iterations": 10,
-            "runtime_ms": 20.314899971708655
+            "runtime_ms": 18.4163999510929
           },
           {
             "rmse": 0.2796314091912914,
             "mae": 0.1881226227967461,
             "psnr": 11.068280973810632,
             "iterations": 15,
-            "runtime_ms": 25.3838999196887
+            "runtime_ms": 29.226799961179495
           },
           {
             "rmse": 0.2730798447186483,
             "mae": 0.18273281640081884,
             "psnr": 11.27420705546194,
             "iterations": 20,
-            "runtime_ms": 36.39020002447069
+            "runtime_ms": 36.808400065638125
           },
           {
             "rmse": 0.2628888525965168,
             "mae": 0.17421428703679687,
             "psnr": 11.604556582053949,
             "iterations": 30,
-            "runtime_ms": 50.75579998083413
+            "runtime_ms": 54.89210004452616
           },
           {
             "rmse": 0.24930927781751297,
             "mae": 0.16284246036802014,
             "psnr": 12.065231186444741,
             "iterations": 50,
-            "runtime_ms": 92.9372999817133
+            "runtime_ms": 93.36069994606078
           },
           {
             "rmse": 0.23124356051877942,
             "mae": 0.1477796693904081,
             "psnr": 12.718607045949337,
             "iterations": 100,
-            "runtime_ms": 190.9389999927953
+            "runtime_ms": 201.29499991890043
           }
         ]
       },
@@ -340,56 +340,56 @@
             "mae": 0.21674506763057924,
             "psnr": 10.134265693387315,
             "iterations": 1,
-            "runtime_ms": 5.642300006002188
+            "runtime_ms": 5.647100042551756
           },
           {
             "rmse": 0.2984715525542252,
             "mae": 0.20418748027772993,
             "psnr": 10.501941106937807,
             "iterations": 5,
-            "runtime_ms": 16.828800085932016
+            "runtime_ms": 15.292499912902713
           },
           {
             "rmse": 0.2879617560159785,
             "mae": 0.19570133426858752,
             "psnr": 10.813303734683588,
             "iterations": 10,
-            "runtime_ms": 33.28279999550432
+            "runtime_ms": 32.15520002413541
           },
           {
             "rmse": 0.27994199182761237,
             "mae": 0.18918695721104578,
             "psnr": 11.058639033094043,
             "iterations": 15,
-            "runtime_ms": 53.347500041127205
+            "runtime_ms": 44.1502999747172
           },
           {
             "rmse": 0.2733945046465516,
             "mae": 0.18379472364255534,
             "psnr": 11.264204383927536,
             "iterations": 20,
-            "runtime_ms": 63.73809999786317
+            "runtime_ms": 64.4927000394091
           },
           {
             "rmse": 0.26321960174731024,
             "mae": 0.17531649372074007,
             "psnr": 11.59363544601657,
             "iterations": 30,
-            "runtime_ms": 92.14870003052056
+            "runtime_ms": 79.16339999064803
           },
           {
             "rmse": 0.24969340642354265,
             "mae": 0.16399178042225696,
             "psnr": 12.051858515542495,
             "iterations": 50,
-            "runtime_ms": 139.1167000401765
+            "runtime_ms": 142.4004000145942
           },
           {
             "rmse": 0.2318962688952266,
             "mae": 0.1493432513103637,
             "psnr": 12.694124778102706,
             "iterations": 100,
-            "runtime_ms": 284.6527999499813
+            "runtime_ms": 265.457300003618
           }
         ]
       }
@@ -601,7 +601,26 @@
     "metadata": {
       "model": "Calibrated Photometric Headroom Scaling (Unclipped Poisson)",
       "s_scale": 0.7,
-      "clipping_policy": "Zero clipping; observations strictly within [0, 1] via headroom scaling",
+      "nominal_photon_fluxes": [
+        1000,
+        5000,
+        20000
+      ],
+      "effective_photon_fluxes": [
+        700,
+        3500,
+        14000
+      ],
+      "effective_budget_mapping": {
+        "1000": 700,
+        "5000": 3500,
+        "20000": 14000
+      },
+      "effective_variance_derivation": "Var(g/s) = b / (photons * s) = b / N_eff; effective photon budget is N_eff = photons * s_scale",
+      "exceedance_probability_bound": "< 2.3e-25 per pixel, < 7.4e-21 per 96x336 frame at nominal 1000 photons under s=0.70 (11.3 sigma margin)",
+      "exceedance_trials_failed": 0,
+      "clipping_policy": "Zero clipping on raw observation input. Realizations are strictly verified in [0, 1]; trials exceeding range raise a RuntimeError. Final unit-interval clipping applies only to rescaled restored estimate.",
+      "api_limitation_note": "A bounded [0, 1] public API cannot represent unbounded Poisson distributions without either headroom scaling (which reduces effective photon budget to s*N) or silent upper-tail truncation (which introduces negative bias and cuts variance).",
       "margin": 12,
       "seeds": [
         0,
@@ -614,11 +633,6 @@
         7,
         8,
         9
-      ],
-      "photon_fluxes": [
-        1000,
-        5000,
-        20000
       ]
     },
     "results": {
@@ -759,6 +773,12 @@
   "poisson_unbounded_count_study": {
     "metadata": {
       "model": "Unconstrained Photon-Count Domain (Raw Integer Counts)",
+      "effective_photon_fluxes": [
+        1000,
+        5000,
+        20000
+      ],
+      "like_for_like_comparison_note": "Direct count-domain experiment uses C ~ Poisson(N * b) where effective budget is N (1000, 5000, 20000), which is 1/s = 1.43x higher than the headroom experiment's effective budget N_eff = s*N (700, 3500, 14000). Thus direct count study is a theoretical reference benchmark, not a like-for-like comparison at the same nominal label.",
       "clipping_policy": "Unbounded counts during iteration; unit interval clipping applied only to final normalized output",
       "api_limitation_note": "Requires separate count-domain iteration; cannot be passed to public API filters due to [0, 1] input contract in validate_image",
       "margin": 12,
