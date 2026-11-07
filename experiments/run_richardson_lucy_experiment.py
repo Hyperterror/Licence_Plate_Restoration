@@ -141,24 +141,42 @@ def run_multi_seed_comparison(seeds: list[int],
 
 def run_poisson_noise_experiment(plate: np.ndarray, psf: np.ndarray,
                                  photon_fluxes: list[int]) -> dict:
-    """Evaluate RL, Wiener, and CLS under genuine Poisson observation noise."""
+    """Evaluate RL, Wiener, and CLS under genuine Poisson observation noise.
+
+    Explicitly reports both:
+    * Deployable configurations: fixed hyper-parameters (K=1e-3, lambda=1e-3, iters=20);
+    * Oracle benchmarks: hyper-parameters swept and selected against ground-truth clean plate.
+    """
     blurred = blur_fft(plate, psf)
     results = {}
     for photons in photon_fluxes:
         rng = np.random.default_rng(42)
         counts = rng.poisson(photons * np.clip(blurred, 0.0, 1.0))
         noisy_poisson = clip_unit_interval(counts / photons)
-        
+
         d_m = compute_metrics(noisy_poisson, plate)
+
+        # Deployable configurations (fixed parameters chosen a priori)
+        w_deploy = compute_metrics(wiener_filter(noisy_poisson, psf, K=1e-3), plate)
+        c_deploy = compute_metrics(cls_filter(noisy_poisson, psf, regularization=1e-3), plate)
+        rl_deploy = compute_metrics(richardson_lucy_filter(noisy_poisson, psf, iterations=20), plate)
+
+        # Oracle benchmarks (swept against ground-truth clean reference)
         w_m = min((compute_metrics(wiener_filter(noisy_poisson, psf, K=k), plate)
                    for k in [1e-4, 1e-3, 1e-2]), key=lambda x: x["rmse"])
         c_m = min((compute_metrics(cls_filter(noisy_poisson, psf, regularization=lam), plate)
                    for lam in [1e-4, 1e-3, 1e-2]), key=lambda x: x["rmse"])
         rl_m = min((compute_metrics(richardson_lucy_filter(noisy_poisson, psf, iterations=it), plate)
                     for it in [5, 10, 20, 30, 50]), key=lambda x: x["rmse"])
-        
+
         results[str(photons)] = {
             "degraded": d_m,
+            "wiener_deployable": w_deploy,
+            "cls_deployable": c_deploy,
+            "rl_deployable": rl_deploy,
+            "wiener_oracle": w_m,
+            "cls_oracle": c_m,
+            "rl_oracle": rl_m,
             "wiener": w_m,
             "cls": c_m,
             "rl": rl_m,
@@ -214,11 +232,10 @@ def main() -> None:
     poisson_results = run_poisson_noise_experiment(plate, kernels["7x7"],
                                                    [1000, 5000, 20000])
     for photons, p_data in poisson_results.items():
-        print(f"  Photons={photons:>5s}: "
-              f"Degraded={p_data['degraded']['rmse']:.4e} | "
-              f"Wiener={p_data['wiener']['rmse']:.4e} | "
-              f"CLS={p_data['cls']['rmse']:.4e} | "
-              f"RL={p_data['rl']['rmse']:.4e}")
+        print(f"  Photons={photons:>5s}:")
+        print(f"    Degraded:             RMSE = {p_data['degraded']['rmse']:.4e} (PSNR = {p_data['degraded']['psnr']:.2f} dB)")
+        print(f"    Deployable: Wiener={p_data['wiener_deployable']['rmse']:.4e} | CLS={p_data['cls_deployable']['rmse']:.4e} | RL={p_data['rl_deployable']['rmse']:.4e}")
+        print(f"    Oracle:     Wiener={p_data['wiener_oracle']['rmse']:.4e} | CLS={p_data['cls_oracle']['rmse']:.4e} | RL={p_data['rl_oracle']['rmse']:.4e}")
               
     # Save results to json
     out_dir = Path("experiments")

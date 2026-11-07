@@ -447,19 +447,135 @@ def test_rl_custom_initial_estimate() -> None:
     assert np.all(np.isfinite(out))
 
 
-@pytest.mark.parametrize("profile", ["none", "tukey", "hann", "linear"])
-def test_rl_accepts_all_edge_taper_profiles(profile: str) -> None:
-    """All taper profiles must be accepted and return finite images in [0, 1]."""
+def test_rl_profile_none_supported() -> None:
+    """Option B: profile='none' is supported and returns valid float32 images in [0, 1]."""
     image = _textured()
     psf = _gaussian(5, 1.0)
     degraded = blur_fft(image, psf)
-    restored = richardson_lucy_filter(degraded, psf, iterations=5, profile=profile)
+    restored = richardson_lucy_filter(degraded, psf, iterations=5, profile="none")
     assert np.all(np.isfinite(restored))
     assert float(restored.min()) >= 0.0 and float(restored.max()) <= 1.0
 
 
+@pytest.mark.parametrize("profile", ["tukey", "hann", "linear", "invalid"])
+def test_rl_rejects_unsupported_edge_taper_profiles(profile: str) -> None:
+    """Option B: Non-none taper profiles violate Poisson likelihood and must be rejected."""
+    image = _textured()
+    psf = _gaussian(5, 1.0)
+    with pytest.raises(ValueError, match="only supports profile='none'"):
+        richardson_lucy_filter(image, psf, iterations=2, profile=profile)
+
+
+def test_rl_profile_none_rejects_ramp_parameters() -> None:
+    """Ramp parameters (width, fraction) are invalid when profile='none'."""
+    image = _textured()
+    psf = _gaussian(5, 1.0)
+    with pytest.raises(ValueError, match="the 'none' profile has no ramp"):
+        richardson_lucy_filter(image, psf, iterations=2, profile="none", width=4)
+
+    with pytest.raises(ValueError, match="the 'none' profile has no ramp"):
+        richardson_lucy_filter(image, psf, iterations=2, profile="none", fraction=0.2)
+
+
 # --------------------------------------------------------------------------- #
-# 5. Hypothesis property test
+# 5. Sensitivity normalisation and mathematical hardening (Stage 4.5.1)
+# --------------------------------------------------------------------------- #
+def test_sensitivity_map_is_identically_constant_and_equals_psf_sum() -> None:
+    """Under circular boundary conditions, s = H^T 1 is identically sum(psf)."""
+    for shape in [(96, 336), (48, 168), (24, 84), (12, 42)]:
+        for psf in [_gaussian(5, 1.0), _gaussian(4, 1.0), DELTA]:
+            H = psf_frequency_response(psf, shape, centre="auto")
+            H_adj = np.conj(H)
+            ones = np.ones(shape, dtype=np.float64)
+            s_map = np.real(np.fft.ifft2(H_adj * np.fft.fft2(ones)))
+            psf_sum = float(np.sum(psf, dtype=np.float64))
+            max_dev = float(np.max(np.abs(s_map - psf_sum)))
+            assert max_dev < 1e-13, f"Shape {shape} deviated by {max_dev:.2e}"
+            assert np.isclose(float(np.real(H[0, 0])), psf_sum, atol=1e-12)
+
+
+def test_sensitivity_normalization_prevents_photometric_drift_sum_above_one() -> None:
+    """PSF sum 1.0 + 8e-6 within tolerance must not cause cumulative scaling drift."""
+    image = np.full((16, 16), 0.5, dtype=np.float32)
+    # Uniform 3x3 kernel summing to 1.000008 (within 1e-5 tolerance)
+    psf_hi = np.full((3, 3), 1.000008 / 9.0, dtype=np.float32)
+    assert abs(float(psf_hi.sum()) - 1.0) < 1e-5
+
+    degraded = blur_fft(image, psf_hi)
+    # Starting from the exact image, 50 iterations must remain at 0.5 without scaling drift
+    restored = richardson_lucy_filter(degraded, psf_hi, iterations=50,
+                                      initial_estimate=image)
+    assert np.isclose(float(restored.mean()), 0.5, atol=1e-6)
+
+    # Starting from blurred, 50 iterations must also converge to 0.5
+    restored_from_deg = richardson_lucy_filter(degraded, psf_hi, iterations=50)
+    assert np.isclose(float(restored_from_deg.mean()), 0.5, atol=1e-6)
+
+
+def test_sensitivity_normalization_prevents_photometric_decay_sum_below_one() -> None:
+    """PSF sum 1.0 - 8e-6 within tolerance must not cause cumulative photometric decay."""
+    image = np.full((16, 16), 0.5, dtype=np.float32)
+    psf_lo = np.full((3, 3), 0.999992 / 9.0, dtype=np.float32)
+    assert abs(float(psf_lo.sum()) - 1.0) < 1e-5
+
+    degraded = blur_fft(image, psf_lo)
+    restored = richardson_lucy_filter(degraded, psf_lo, iterations=50,
+                                      initial_estimate=image)
+    assert np.isclose(float(restored.mean()), 0.5, atol=1e-6)
+
+
+def test_sensitivity_normalization_exact_unity_for_perfectly_normalized_psf() -> None:
+    """When sum(psf) == 1.000000, sensitivity normalisation simplifies to exact unity."""
+    psf = np.array([[0.0, 0.25, 0.0],
+                    [0.25, 0.0, 0.25],
+                    [0.0, 0.25, 0.0]], dtype=np.float32)
+    assert float(psf.sum()) == 1.0
+    image = _textured()
+    degraded = blur_fft(image, psf)
+    out = richardson_lucy_filter(degraded, psf, iterations=10)
+    assert np.all(np.isfinite(out))
+    assert float(out.min()) >= 0.0 and float(out.max()) <= 1.0
+
+
+def test_even_sized_psf_subpixel_centring_preserves_dc_sensitivity() -> None:
+    """Sub-pixel phase shift exp(-j 2 pi (u*0.5/M + v*0.5/N)) is exactly 1.0 at DC (0, 0)."""
+    psf_even = np.full((4, 4), 1.0 / 16.0, dtype=np.float32)
+    for shape in [(96, 336), (48, 168), (24, 84), (12, 42)]:
+        H = psf_frequency_response(psf_even, shape, centre="auto")
+        assert np.isclose(np.real(H[0, 0]), 1.0, atol=1e-12)
+        assert np.isclose(np.imag(H[0, 0]), 0.0, atol=1e-12)
+
+
+def test_flux_conservation_with_approximate_psf_sum() -> None:
+    """Total flux sum(g) = sum(h) * sum(f); RL inverts this so sum(f_est) = sum(g) / sum(h)."""
+    image = np.full((16, 16), 0.4, dtype=np.float32)
+    psf_hi = np.full((3, 3), 1.000008 / 9.0, dtype=np.float32)
+    blurred = blur_fft(image, psf_hi)
+    # Unclipped RL
+    restored = richardson_lucy_filter(blurred, psf_hi, iterations=20,
+                                      initial_estimate=image, clip_intermediate=False)
+    expected_flux = float(blurred.sum()) / float(psf_hi.sum())
+    actual_flux = float(restored.sum())
+    assert np.isclose(actual_flux, expected_flux, rtol=1e-5)
+
+
+def test_all_four_project_resolutions_with_hardened_sensitivity() -> None:
+    """All 4 standard plate resolutions execute cleanly with hardened sensitivity."""
+    resolutions = [(96, 336), (48, 168), (24, 84), (12, 42)]
+    psf = _gaussian(5, 1.0)
+    for rows, cols in resolutions:
+        img = np.full((rows, cols), 0.5, dtype=np.float32)
+        img[rows // 4: 3 * rows // 4, cols // 4: 3 * cols // 4] = 0.8
+        deg = blur_fft(img, psf)
+        out = richardson_lucy_filter(deg, psf, iterations=5)
+        assert out.shape == (rows, cols)
+        assert out.dtype == np.float32
+        assert np.all(np.isfinite(out))
+        assert float(out.min()) >= 0.0 and float(out.max()) <= 1.0
+
+
+# --------------------------------------------------------------------------- #
+# 6. Hypothesis property test
 # --------------------------------------------------------------------------- #
 @given(image=float32_image_strategy(min_h=8, min_w=8, max_h=24, max_w=24),
        iters=st.sampled_from([0, 1, 3, 5]))

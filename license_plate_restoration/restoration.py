@@ -1740,27 +1740,50 @@ def richardson_lucy_filter(image, psf, iterations: int = 30, *,
     likelihood estimate of the sharp image :math:`f` under a Poisson observation
     model :math:`g \\sim \\operatorname{Poisson}(h * f)`.  Starting from an initial
     non-negative estimate :math:`f^{(0)}`, the estimate is iteratively updated
-    via the fixed-point multiplicative scheme:
+    via the fixed-point multiplicative scheme with sensitivity normalisation:
 
-    .. math:: f^{(k+1)} = f^{(k)} \\odot H^T \\left[
-              \\frac{g}{\\max(H f^{(k)}, \\varepsilon)} \\right]
+    .. math:: f^{(k+1)} = f^{(k)} \\odot \\frac{H^T \\left[
+              \\frac{g}{\\max(H f^{(k)}, \\varepsilon)} \\right]}{
+              \\max(H^T \\mathbf{1}, \\varepsilon)}
 
     where:
-    * :math:`g` is the observed (optionally edge-tapered) image;
+    * :math:`g` is the observed image (unwindowed, ``profile="none"``);
     * :math:`H` is the forward circular convolution operator with the blur PSF,
       computed via :func:`psf_frequency_response`:
       :math:`H x = \\operatorname{Re}(\\mathcal{F}^{-1}\\{H(u,v) \\cdot \\mathcal{F}\\{x\\}\\})`;
     * :math:`H^T` is the adjoint operator, computed via correlation with the
       PSF (complex conjugate frequency transfer function):
       :math:`H^T y = \\operatorname{Re}(\\mathcal{F}^{-1}\\{H^*(u,v) \\cdot \\mathcal{F}\\{y\\}\\})`;
+    * :math:`H^T \\mathbf{1}` is the sensitivity map.  Under circular boundary
+      conditions without spatial windowing (``profile="none"``),
+      :math:`(H^T \\mathbf{1})(x, y) \\equiv \\operatorname{Re}(H^*(0, 0)) = \\sum h`
+      is identically constant across all pixels;
     * :math:`\\odot` denotes element-wise multiplication;
     * :math:`\\varepsilon > 0` is a small positive threshold guarding against
       division by zero and non-physical negative FFT round-off;
     * :math:`k = 0, 1, \\dots, \\text{iterations}-1`.
 
-    **Forward and Adjoint Consistency.**  For normalized PSFs (:math:`\\sum h = 1`)
-    under circular boundary conditions, the sensitivity map :math:`H^T \\mathbf{1}`
-    is identically :math:`\\mathbf{1}`.  The inner-product identity
+    **Sensitivity Normalisation and Stored PSFs.**  The project specification
+    validates PSFs within tolerance :math:`|\\sum h - 1| \\le 10^{-5}` and
+    strictly forbids renormalising stored PSFs.  When :math:`\\sum h \\ne 1.0`
+    (e.g. :math:`1.000008`), omitting sensitivity normalisation causes an
+    uncontrolled scaling drift of :math:`(\\sum h)^k` over :math:`k` iterations.
+    Explicitly dividing by :math:`H^T \\mathbf{1} = \\sum h` guarantees exact
+    flux conservation and scale invariance without modifying stored PSF values.
+    Sensitivity normalisation can only be omitted when :math:`\\sum h = 1.0`
+    exactly and no boundary weighting is applied.
+
+    **Edge Tapering Restriction (Option B).**  Only ``profile="none"`` is
+    supported.  Ad-hoc spatial edge tapering multiplies the observation by a
+    spatial window :math:`w`, which violates the stationary Poisson convolution
+    likelihood model.  Furthermore, the corresponding sensitivity map
+    :math:`H^T w` falls towards 0 at image borders, causing severe numerical
+    division instability and inward-propagating artefacts.  Synthetic license
+    plates carry an 8 px grey margin where circular convolution wrap is exact
+    (measured wrap step 0.0000), making spatial edge tapering both unnecessary
+    and detrimental.
+
+    **Forward and Adjoint Consistency.**  The inner-product identity
     :math:`\\langle Hx, y \\rangle = \\langle x, H^T y \\rangle` holds to machine
     precision across all resolutions and PSF symmetries.
 
@@ -1802,9 +1825,9 @@ def richardson_lucy_filter(image, psf, iterations: int = 30, *,
         If ``False`` (default), only enforces non-negativity (:math:`\\ge 0`)
         during iterations and clips to ``[0, 1]`` once at the end.
     width, fraction, profile:
-        Forwarded to :func:`taper_edges`.  Default profile is
-        :data:`DEFAULT_INVERSE_TAPER` (``"none"``) because plate images carry
-        an 8 px margin, making circular convolution exact.
+        Edge taper controls.  Only ``profile="none"`` is supported (default:
+        :data:`DEFAULT_INVERSE_TAPER` = ``"none"``).  Passing any other profile
+        raises :exc:`ValueError`.
     centre:
         ``"auto"`` (default) or ``"pixel"``, forwarded to
         :func:`psf_frequency_response`.  ``"auto"`` corrects sub-pixel shifts
@@ -1826,8 +1849,9 @@ def richardson_lucy_filter(image, psf, iterations: int = 30, *,
     ValueError
         If ``iterations`` is negative, non-integer, or non-finite; if ``eps``
         is non-positive or non-finite; if ``initial_estimate`` is invalid; if
-        ``image`` is invalid; if ``psf`` fails validation; or if taper/centre
-        parameters are invalid.
+        ``image`` is invalid; if ``psf`` fails validation; if ``profile`` is
+        not ``"none"``; if taper parameters are invalid; or if the sensitivity
+        map is non-positive or non-finite.
 
     Examples
     --------
@@ -1845,14 +1869,39 @@ def richardson_lucy_filter(image, psf, iterations: int = 30, *,
     if not isinstance(clip_intermediate, bool):
         raise ValueError(f"clip_intermediate must be a bool, got {clip_intermediate!r}")
 
+    # Edge tapering restriction (Option B): spatial windowing violates the
+    # stationary Poisson likelihood model and creates boundary division blowup
+    # in the sensitivity map H^T W 1.
+    if profile != "none":
+        raise ValueError(
+            f"richardson_lucy_filter only supports profile='none', got {profile!r}. "
+            "Spatial edge tapering violates the stationary Poisson convolution model "
+            "g ~ Poisson(h * f) and creates severe boundary division instability in "
+            "sensitivity normalisation (H^T W 1 -> 0). Plate images already feature "
+            "an 8 px margin where circular convolution wrap is exact."
+        )
+    # Validate width/fraction parameters against taper contract with profile='none'
+    _ = edge_taper_window(degraded.shape, width=width, fraction=fraction,
+                          profile=profile)
+
     response = psf_frequency_response(psf, degraded.shape, tol=tol,
                                       require_odd=require_odd, centre=centre)
     adj_response = np.conj(response)
-    windowed = taper_edges(degraded, width=width, fraction=fraction,
-                           profile=profile)
+
+    # Sensitivity normalisation: s = H^T 1.
+    # Under circular boundary conditions and profile='none',
+    # s(x, y) = Re(H^*(0, 0)) = sum(psf) across all pixels (x, y).
+    # Stored PSFs have sum(psf) in [1 - 1e-5, 1 + 1e-5] and must not be renormalised.
+    s_val = float(np.real(response[0, 0]))
+    if not np.isfinite(s_val) or s_val <= 0.0:
+        raise ValueError(
+            f"Sensitivity map must be strictly positive and finite, got {s_val:.6e}"
+        )
+    s_safe = max(s_val, eps_val)
+    inv_s = 1.0 / s_safe
 
     if initial_estimate is None:
-        estimate = np.maximum(windowed.astype(np.float64), eps_val)
+        estimate = np.maximum(degraded.astype(np.float64), eps_val)
     else:
         init = _as_float_array(initial_estimate, "initial_estimate")
         if init.shape != degraded.shape:
@@ -1870,7 +1919,7 @@ def richardson_lucy_filter(image, psf, iterations: int = 30, *,
             )
         estimate = np.maximum(init.astype(np.float64), eps_val)
 
-    obs = windowed.astype(np.float64)
+    obs = degraded.astype(np.float64)
     for _ in range(num_iters):
         # 1. Forward model: predict blurred observation H f
         prediction = np.real(np.fft.ifft2(response * np.fft.fft2(estimate)))
@@ -1883,8 +1932,8 @@ def richardson_lucy_filter(image, psf, iterations: int = 30, *,
         correction = np.real(np.fft.ifft2(adj_response * np.fft.fft2(ratio)))
         corr_safe = np.maximum(correction, 0.0)
 
-        # 4. Multiplicative update
-        estimate = estimate * corr_safe
+        # 4. Sensitivity-normalised multiplicative update: f <- f * (corr / s)
+        estimate = estimate * (corr_safe * inv_s)
         if clip_intermediate:
             estimate = np.clip(estimate, 0.0, 1.0)
         else:
