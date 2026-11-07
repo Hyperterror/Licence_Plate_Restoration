@@ -1,0 +1,502 @@
+{
+  "extension_e1_ccpd_base": {
+    "summary": {
+      "degraded_psnr": 25.00832299972615,
+      "wiener_psnr": 24.776408096318264,
+      "cls_psnr": 32.231023367326046,
+      "rl_psnr": 30.515730856221023
+    },
+    "records": [
+      {
+        "idx": 0,
+        "text": "A58M83",
+        "degraded": {
+          "rmse": 0.08546106733432586,
+          "psnr": 21.36463375049967,
+          "ssim": 0.7839226018712275
+        },
+        "wiener": {
+          "rmse": 0.061909789370578894,
+          "psnr": 24.164813470816338,
+          "ssim": 0.7817536367669725
+        },
+        "cls": {
+          "rmse": 0.03171861486355953,
+          "psnr": 29.9737157273708,
+          "ssim": 0.9290743204059636
+        },
+        "rl": {
+          "rmse": 0.045263044627310144,
+          "psnr": 26.885124729955436,
+          "ssim": 0.9015875730018746
+        }
+      },
+      {
+        "idx": 1,
+        "text": "A49984",
+        "degraded": {
+          "rmse": 0.05221291688516442,
+          "psnr": 25.64444088324942,
+          "ssim": 0.8385534250421536
+        },
+        "wiener": {
+          "rmse": 0.053373492956245834,
+          "psnr": 25.45348748899704,
+          "ssim": 0.7158913918475049
+        },
+        "cls": {
+          "rmse": 0.02430164686554445,
+          "psnr": 32.287285885742975,
+          "ssim": 0.9160011443587737
+        },
+        "rl": {
+          "rmse": 0.02936272834135274,
+          "psnr": 30.64407185758338,
+          "ssim": 0.9138736173258423
+        }
+      },
+      {
+        "idx": 2,
+        "text": "ARM802",
+        "degraded": {
+          "rmse": 0.06112307165037039,
+          "psnr": 24.2758965810274,
+          "ssim": 0.8575455480949298
+        },
+        "wiener": {
+          "rmse": 0.0580114074633441,
+          "psnr": 24.729731952448198,
+          "ssim": 0.7941109599822689
+        },
+        "cls": {
+          "rmse": 0.023342799467240865,
+          "psnr": 32.636941217511406,
+          "ssim": 0.949601851043976
+        },
+        "rl": {
+          "rmse": 0.02912991481093066,
+          "psnr": 30.71321570888629,
+          "ssim": 0.9391769322898244
+        }
+      },
+      {
+        "idx": 3,
+        "text": "AG5655",
+        "degraded": {
+          "rmse": 0.038555038248756036,
+          "psnr": 28.278377233888968,
+          "ssim": 0.9065274912601963
+        },
+        "wiener": {
+          "rmse": 0.054764660638893535,
+          "psnr": 25.229991983725498,
+          "ssim": 0.7191467326984211
+        },
+        "cls": {
+          "rmse": 0.019481974137984897,
+          "psnr": 34.20734075018171,
+          "ssim": 0.9433817170080959
+        },
+        "rl": {
+          "rmse": 0.01924573272072782,
+          "psnr": 34.313310997169836,
+          "ssim": 0.9552644283547111
+        }
+      },
+      {
+        "idx": 4,
+        "text": "ADE806",
+        "degraded": {
+          "rmse": 0.04674784866706317,
+          "psnr": 26.604767410704717,
+          "ssim": 0.8951944149497543
+        },
+        "wiener": {
+          "rmse": 0.05800308935631836,
+          "psnr": 24.730977489199685,
+          "ssim": 0.7690440126606498
+        },
+        "cls": {
+          "rmse": 0.02081438374202147,
+          "psnr": 33.6327288575921,
+          "ssim": 0.9529818365011695
+        },
+        "rl": {
+          "rmse": 0.02570504889866864,
+          "psnr": 31.799631312770874,
+          "ssim": 0.9454689281923526
+        }
+      },
+      {
+        "idx": 5,
+        "text": "AUS360",
+        "degraded": {
+          "rmse": 0.07846697562240876,
+          "psnr": 22.10626172436988,
+          "ssim": 0.7918682543680245
+        },
+        "wiener": {
+          "rmse": 0.06437996884697343,
+          "psnr": 23.824984756049673,
+          "ssim": 0.7898624510579747
+        },
+        "cls": {
+          "rmse": 0.03157069114822512,
+          "psnr": 30.014318207847932,
+          "ssim": 0.9302705939983037
+        },
+        "rl": {
+          "rmse": 0.04352181931543379,
+          "psnr": 27.225859167788023,
+          "ssim": 0.899027446616055
+        }
+      },
+      {
+        "idx": 6,
+        "text": "A03C23",
+        "degraded": {
+          "rmse": 0.04121670729686298,
+          "psnr": 27.698534118152697,
+          "ssim": 0.8740735281191464
+        },
+        "wiener": {
+          "rmse": 0.05384969516345783,
+          "psnr": 25.37633501694037,
+          "ssim": 0.7386661632180749
+        },
+        "cls": {
+          "rmse": 0.02143178940528644,
+          "psnr": 33.37883133754097,
+          "ssim": 0.9373295945132205
+        },
+        "rl": {
+          "rmse": 0.02440494882689614,
+          "psnr": 32.25044197299077,
+          "ssim": 0.9301067708188581
+        }
+      },
+      {
+        "idx": 7,
+        "text": "A2J528",
+        "degraded": {
+          "rmse": 0.05580627945268522,
+          "psnr": 25.066338609702473,
+          "ssim": 0.8350720695508617
+        },
+        "wiener": {
+          "rmse": 0.05726101815806712,
+          "psnr": 24.842818681126325,
+          "ssim": 0.692811728277705
+        },
+        "cls": {
+          "rmse": 0.025044100427404545,
+          "psnr": 32.02589126705628,
+          "ssim": 0.9152863024944056
+        },
+        "rl": {
+          "rmse": 0.031096496744425776,
+          "psnr": 30.145770695516294,
+          "ssim": 0.909792981216388
+        }
+      },
+      {
+        "idx": 8,
+        "text": "AC7563",
+        "degraded": {
+          "rmse": 0.06570893130004446,
+          "psnr": 23.647511923658215,
+          "ssim": 0.8513464643022423
+        },
+        "wiener": {
+          "rmse": 0.06477414084757252,
+          "psnr": 23.771966774139667,
+          "ssim": 0.7510539383848134
+        },
+        "cls": {
+          "rmse": 0.026610717938879907,
+          "psnr": 31.498868166478566,
+          "ssim": 0.9318276565741243
+        },
+        "rl": {
+          "rmse": 0.03194706922524939,
+          "psnr": 29.91137954365362,
+          "ssim": 0.9247562390007324
+        }
+      },
+      {
+        "idx": 9,
+        "text": "AL730W",
+        "degraded": {
+          "rmse": 0.05372502322416113,
+          "psnr": 25.396467762008058,
+          "ssim": 0.8448233560587861
+        },
+        "wiener": {
+          "rmse": 0.05224579385610728,
+          "psnr": 25.638973349739835,
+          "ssim": 0.7493957219209096
+        },
+        "cls": {
+          "rmse": 0.023296162509808042,
+          "psnr": 32.654312255937704,
+          "ssim": 0.9297740555502323
+        },
+        "rl": {
+          "rmse": 0.027325924948989114,
+          "psnr": 31.268502575895724,
+          "ssim": 0.9234620446386518
+        }
+      }
+    ]
+  },
+  "extension_e3_ccpd_blur": {
+    "yields": {
+      "degraded_crop_mean": 1.2,
+      "wiener_crop_mean": 1.8,
+      "cls_crop_mean": 2.3,
+      "rl_crop_mean": 1.3
+    },
+    "records": [
+      {
+        "idx": 0,
+        "text": "AJ1G13",
+        "degraded_readability": {
+          "segmented_crops": 4,
+          "expected_chars": 6,
+          "segmentation_status": "under_segmented_merging"
+        },
+        "wiener_readability": {
+          "segmented_crops": 4,
+          "expected_chars": 6,
+          "segmentation_status": "under_segmented_merging"
+        },
+        "cls_readability": {
+          "segmented_crops": 5,
+          "expected_chars": 6,
+          "segmentation_status": "under_segmented_merging"
+        },
+        "rl_readability": {
+          "segmented_crops": 3,
+          "expected_chars": 6,
+          "segmentation_status": "under_segmented_merging"
+        }
+      },
+      {
+        "idx": 1,
+        "text": "AMX851",
+        "degraded_readability": {
+          "segmented_crops": 5,
+          "expected_chars": 6,
+          "segmentation_status": "under_segmented_merging"
+        },
+        "wiener_readability": {
+          "segmented_crops": 4,
+          "expected_chars": 6,
+          "segmentation_status": "under_segmented_merging"
+        },
+        "cls_readability": {
+          "segmented_crops": 4,
+          "expected_chars": 6,
+          "segmentation_status": "under_segmented_merging"
+        },
+        "rl_readability": {
+          "segmented_crops": 5,
+          "expected_chars": 6,
+          "segmentation_status": "under_segmented_merging"
+        }
+      },
+      {
+        "idx": 2,
+        "text": "AN8N98",
+        "degraded_readability": {
+          "segmented_crops": 2,
+          "expected_chars": 6,
+          "segmentation_status": "under_segmented_merging"
+        },
+        "wiener_readability": {
+          "segmented_crops": 4,
+          "expected_chars": 6,
+          "segmentation_status": "under_segmented_merging"
+        },
+        "cls_readability": {
+          "segmented_crops": 5,
+          "expected_chars": 6,
+          "segmentation_status": "under_segmented_merging"
+        },
+        "rl_readability": {
+          "segmented_crops": 4,
+          "expected_chars": 6,
+          "segmentation_status": "under_segmented_merging"
+        }
+      },
+      {
+        "idx": 3,
+        "text": "AAW790",
+        "degraded_readability": {
+          "segmented_crops": 0,
+          "expected_chars": 6,
+          "segmentation_status": "failed_empty"
+        },
+        "wiener_readability": {
+          "segmented_crops": 0,
+          "expected_chars": 6,
+          "segmentation_status": "failed_empty"
+        },
+        "cls_readability": {
+          "segmented_crops": 0,
+          "expected_chars": 6,
+          "segmentation_status": "failed_empty"
+        },
+        "rl_readability": {
+          "segmented_crops": 0,
+          "expected_chars": 6,
+          "segmentation_status": "failed_empty"
+        }
+      },
+      {
+        "idx": 4,
+        "text": "AZQ050",
+        "degraded_readability": {
+          "segmented_crops": 0,
+          "expected_chars": 6,
+          "segmentation_status": "failed_empty"
+        },
+        "wiener_readability": {
+          "segmented_crops": 0,
+          "expected_chars": 6,
+          "segmentation_status": "failed_empty"
+        },
+        "cls_readability": {
+          "segmented_crops": 0,
+          "expected_chars": 6,
+          "segmentation_status": "failed_empty"
+        },
+        "rl_readability": {
+          "segmented_crops": 0,
+          "expected_chars": 6,
+          "segmentation_status": "failed_empty"
+        }
+      },
+      {
+        "idx": 5,
+        "text": "AFT775",
+        "degraded_readability": {
+          "segmented_crops": 1,
+          "expected_chars": 6,
+          "segmentation_status": "under_segmented_merging"
+        },
+        "wiener_readability": {
+          "segmented_crops": 2,
+          "expected_chars": 6,
+          "segmentation_status": "under_segmented_merging"
+        },
+        "cls_readability": {
+          "segmented_crops": 2,
+          "expected_chars": 6,
+          "segmentation_status": "under_segmented_merging"
+        },
+        "rl_readability": {
+          "segmented_crops": 1,
+          "expected_chars": 6,
+          "segmentation_status": "under_segmented_merging"
+        }
+      },
+      {
+        "idx": 6,
+        "text": "AWM504",
+        "degraded_readability": {
+          "segmented_crops": 0,
+          "expected_chars": 6,
+          "segmentation_status": "failed_empty"
+        },
+        "wiener_readability": {
+          "segmented_crops": 0,
+          "expected_chars": 6,
+          "segmentation_status": "failed_empty"
+        },
+        "cls_readability": {
+          "segmented_crops": 0,
+          "expected_chars": 6,
+          "segmentation_status": "failed_empty"
+        },
+        "rl_readability": {
+          "segmented_crops": 0,
+          "expected_chars": 6,
+          "segmentation_status": "failed_empty"
+        }
+      },
+      {
+        "idx": 7,
+        "text": "ASC646",
+        "degraded_readability": {
+          "segmented_crops": 0,
+          "expected_chars": 6,
+          "segmentation_status": "failed_empty"
+        },
+        "wiener_readability": {
+          "segmented_crops": 4,
+          "expected_chars": 6,
+          "segmentation_status": "under_segmented_merging"
+        },
+        "cls_readability": {
+          "segmented_crops": 7,
+          "expected_chars": 6,
+          "segmentation_status": "over_segmented_fragmentation"
+        },
+        "rl_readability": {
+          "segmented_crops": 0,
+          "expected_chars": 6,
+          "segmentation_status": "failed_empty"
+        }
+      },
+      {
+        "idx": 8,
+        "text": "AX3058",
+        "degraded_readability": {
+          "segmented_crops": 0,
+          "expected_chars": 6,
+          "segmentation_status": "failed_empty"
+        },
+        "wiener_readability": {
+          "segmented_crops": 0,
+          "expected_chars": 6,
+          "segmentation_status": "failed_empty"
+        },
+        "cls_readability": {
+          "segmented_crops": 0,
+          "expected_chars": 6,
+          "segmentation_status": "failed_empty"
+        },
+        "rl_readability": {
+          "segmented_crops": 0,
+          "expected_chars": 6,
+          "segmentation_status": "failed_empty"
+        }
+      },
+      {
+        "idx": 9,
+        "text": "AY5A65",
+        "degraded_readability": {
+          "segmented_crops": 0,
+          "expected_chars": 6,
+          "segmentation_status": "failed_empty"
+        },
+        "wiener_readability": {
+          "segmented_crops": 0,
+          "expected_chars": 6,
+          "segmentation_status": "failed_empty"
+        },
+        "cls_readability": {
+          "segmented_crops": 0,
+          "expected_chars": 6,
+          "segmentation_status": "failed_empty"
+        },
+        "rl_readability": {
+          "segmented_crops": 0,
+          "expected_chars": 6,
+          "segmentation_status": "failed_empty"
+        }
+      }
+    ]
+  }
+}

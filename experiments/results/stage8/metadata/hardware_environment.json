@@ -1,0 +1,12 @@
+{
+  "os": "Windows",
+  "os_release": "11",
+  "os_version": "10.0.26300",
+  "architecture": "AMD64",
+  "processor": "AMD64 Family 25 Model 116 Stepping 1, AuthenticAMD",
+  "python_version": "3.14.0",
+  "numpy_version": "2.3.4",
+  "scipy_version": "1.16.3",
+  "skimage_version": "0.26.0",
+  "opencv_version": "5.0.0"
+}

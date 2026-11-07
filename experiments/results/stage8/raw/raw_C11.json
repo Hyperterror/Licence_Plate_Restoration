@@ -1,0 +1,2572 @@
+[
+  {
+    "cell_id": "C11",
+    "trial_idx": 0,
+    "plate_idx": 0,
+    "text": "CH 63 NG 3078",
+    "degraded": {
+      "metrics": {
+        "rmse": 0.31176815479088743,
+        "psnr": 10.123364948107344,
+        "ssim": 0.38216665868469357
+      },
+      "readability": {
+        "segmented_crops": 0,
+        "expected_chars": 10,
+        "segmentation_status": "failed_empty"
+      },
+      "measured_bsnr": null
+    },
+    "restorations": {
+      "wiener_deployable": {
+        "param": 0.001,
+        "metrics": {
+          "rmse": 0.18015311944683618,
+          "psnr": 14.887164268739072,
+          "ssim": 0.4951260639485023
+        },
+        "runtime_ms": 2.7684998931363225,
+        "readability": {
+          "segmented_crops": 1,
+          "expected_chars": 10,
+          "segmentation_status": "under_segmented_merging"
+        },
+        "failures": [
+          "excessive_clipping_23.2pct",
+          "character_merging"
+        ]
+      },
+      "wiener_oracle": {
+        "best_param": 0.001,
+        "metrics": {
+          "rmse": 0.18015311944683618,
+          "psnr": 14.887164268739072,
+          "ssim": 0.4951260639485023
+        },
+        "runtime_ms": 1.7926000291481614,
+        "readability": {
+          "segmented_crops": 1,
+          "expected_chars": 10,
+          "segmentation_status": "under_segmented_merging"
+        },
+        "failures": [
+          "excessive_clipping_23.2pct",
+          "character_merging"
+        ]
+      },
+      "cls_deployable": {
+        "param": 0.001,
+        "metrics": {
+          "rmse": 0.17537859556360094,
+          "psnr": 15.120468241732222,
+          "ssim": 0.5138976428602445
+        },
+        "runtime_ms": 2.9138000681996346,
+        "readability": {
+          "segmented_crops": 5,
+          "expected_chars": 10,
+          "segmentation_status": "under_segmented_merging"
+        },
+        "failures": [
+          "excessive_clipping_25.9pct",
+          "character_merging"
+        ]
+      },
+      "cls_oracle": {
+        "best_param": 0.001,
+        "metrics": {
+          "rmse": 0.17537859556360094,
+          "psnr": 15.120468241732222,
+          "ssim": 0.5138976428602445
+        },
+        "runtime_ms": 3.0406999867409468,
+        "readability": {
+          "segmented_crops": 5,
+          "expected_chars": 10,
+          "segmentation_status": "under_segmented_merging"
+        },
+        "failures": [
+          "excessive_clipping_25.9pct",
+          "character_merging"
+        ]
+      },
+      "richardson_lucy_deployable": {
+        "param": 20,
+        "metrics": {
+          "rmse": 0.2734668094100119,
+          "psnr": 11.261907526632132,
+          "ssim": 0.431241506808251
+        },
+        "runtime_ms": 34.727799938991666,
+        "readability": {
+          "segmented_crops": 0,
+          "expected_chars": 10,
+          "segmentation_status": "failed_empty"
+        },
+        "failures": [
+          "excessive_clipping_18.3pct",
+          "failed_segmentation"
+        ]
+      },
+      "richardson_lucy_oracle": {
+        "best_param": 100,
+        "metrics": {
+          "rmse": 0.23649555096900368,
+          "psnr": 12.523540498758985,
+          "ssim": 0.4470257883780472
+        },
+        "runtime_ms": 187.22750002052635,
+        "readability": {
+          "segmented_crops": 0,
+          "expected_chars": 10,
+          "segmentation_status": "failed_empty"
+        },
+        "failures": [
+          "excessive_clipping_20.9pct",
+          "failed_segmentation"
+        ]
+      }
+    }
+  },
+  {
+    "cell_id": "C11",
+    "trial_idx": 1,
+    "plate_idx": 1,
+    "text": "AR 07 AE 8132",
+    "degraded": {
+      "metrics": {
+        "rmse": 0.3132604384239305,
+        "psnr": 10.081888971759593,
+        "ssim": 0.3837786356282654
+      },
+      "readability": {
+        "segmented_crops": 0,
+        "expected_chars": 10,
+        "segmentation_status": "failed_empty"
+      },
+      "measured_bsnr": null
+    },
+    "restorations": {
+      "wiener_deployable": {
+        "param": 0.001,
+        "metrics": {
+          "rmse": 0.173234005480328,
+          "psnr": 15.227337056666347,
+          "ssim": 0.5058038440900552
+        },
+        "runtime_ms": 2.0103000570088625,
+        "readability": {
+          "segmented_crops": 4,
+          "expected_chars": 10,
+          "segmentation_status": "under_segmented_merging"
+        },
+        "failures": [
+          "excessive_clipping_24.1pct",
+          "character_merging"
+        ]
+      },
+      "wiener_oracle": {
+        "best_param": 0.001,
+        "metrics": {
+          "rmse": 0.173234005480328,
+          "psnr": 15.227337056666347,
+          "ssim": 0.5058038440900552
+        },
+        "runtime_ms": 1.523299957625568,
+        "readability": {
+          "segmented_crops": 4,
+          "expected_chars": 10,
+          "segmentation_status": "under_segmented_merging"
+        },
+        "failures": [
+          "excessive_clipping_24.1pct",
+          "character_merging"
+        ]
+      },
+      "cls_deployable": {
+        "param": 0.001,
+        "metrics": {
+          "rmse": 0.16858211991257316,
+          "psnr": 15.463769784627289,
+          "ssim": 0.5366821084216438
+        },
+        "runtime_ms": 2.424199949018657,
+        "readability": {
+          "segmented_crops": 9,
+          "expected_chars": 10,
+          "segmentation_status": "under_segmented_merging"
+        },
+        "failures": [
+          "excessive_clipping_27.5pct"
+        ]
+      },
+      "cls_oracle": {
+        "best_param": 0.001,
+        "metrics": {
+          "rmse": 0.16858211991257316,
+          "psnr": 15.463769784627289,
+          "ssim": 0.5366821084216438
+        },
+        "runtime_ms": 2.650899928994477,
+        "readability": {
+          "segmented_crops": 9,
+          "expected_chars": 10,
+          "segmentation_status": "under_segmented_merging"
+        },
+        "failures": [
+          "excessive_clipping_27.5pct"
+        ]
+      },
+      "richardson_lucy_deployable": {
+        "param": 20,
+        "metrics": {
+          "rmse": 0.2686928826223788,
+          "psnr": 11.414876747910153,
+          "ssim": 0.424351710362282
+        },
+        "runtime_ms": 34.98820005916059,
+        "readability": {
+          "segmented_crops": 0,
+          "expected_chars": 10,
+          "segmentation_status": "failed_empty"
+        },
+        "failures": [
+          "excessive_clipping_18.9pct",
+          "failed_segmentation"
+        ]
+      },
+      "richardson_lucy_oracle": {
+        "best_param": 100,
+        "metrics": {
+          "rmse": 0.22861419618562182,
+          "psnr": 12.817936097042868,
+          "ssim": 0.4541748156197783
+        },
+        "runtime_ms": 175.87010003626347,
+        "readability": {
+          "segmented_crops": 0,
+          "expected_chars": 10,
+          "segmentation_status": "failed_empty"
+        },
+        "failures": [
+          "excessive_clipping_22.2pct",
+          "failed_segmentation"
+        ]
+      }
+    }
+  },
+  {
+    "cell_id": "C11",
+    "trial_idx": 2,
+    "plate_idx": 2,
+    "text": "TN 91 NQ 9707",
+    "degraded": {
+      "metrics": {
+        "rmse": 0.31229271333626485,
+        "psnr": 10.108762979166146,
+        "ssim": 0.3823736641463593
+      },
+      "readability": {
+        "segmented_crops": 0,
+        "expected_chars": 10,
+        "segmentation_status": "failed_empty"
+      },
+      "measured_bsnr": null
+    },
+    "restorations": {
+      "wiener_deployable": {
+        "param": 0.001,
+        "metrics": {
+          "rmse": 0.1720684714201178,
+          "psnr": 15.285973987134206,
+          "ssim": 0.504061167123336
+        },
+        "runtime_ms": 3.0236999737098813,
+        "readability": {
+          "segmented_crops": 8,
+          "expected_chars": 10,
+          "segmentation_status": "under_segmented_merging"
+        },
+        "failures": [
+          "excessive_clipping_23.5pct",
+          "character_merging"
+        ]
+      },
+      "wiener_oracle": {
+        "best_param": 0.001,
+        "metrics": {
+          "rmse": 0.1720684714201178,
+          "psnr": 15.285973987134206,
+          "ssim": 0.504061167123336
+        },
+        "runtime_ms": 2.509300014935434,
+        "readability": {
+          "segmented_crops": 8,
+          "expected_chars": 10,
+          "segmentation_status": "under_segmented_merging"
+        },
+        "failures": [
+          "excessive_clipping_23.5pct",
+          "character_merging"
+        ]
+      },
+      "cls_deployable": {
+        "param": 0.001,
+        "metrics": {
+          "rmse": 0.15704941994043173,
+          "psnr": 16.07927326644737,
+          "ssim": 0.5552434670598942
+        },
+        "runtime_ms": 3.092300030402839,
+        "readability": {
+          "segmented_crops": 10,
+          "expected_chars": 10,
+          "segmentation_status": "exact_match"
+        },
+        "failures": [
+          "excessive_clipping_27.0pct"
+        ]
+      },
+      "cls_oracle": {
+        "best_param": 0.001,
+        "metrics": {
+          "rmse": 0.15704941994043173,
+          "psnr": 16.07927326644737,
+          "ssim": 0.5552434670598942
+        },
+        "runtime_ms": 3.1102000502869487,
+        "readability": {
+          "segmented_crops": 10,
+          "expected_chars": 10,
+          "segmentation_status": "exact_match"
+        },
+        "failures": [
+          "excessive_clipping_27.0pct"
+        ]
+      },
+      "richardson_lucy_deployable": {
+        "param": 20,
+        "metrics": {
+          "rmse": 0.2699781432662113,
+          "psnr": 11.373427875568467,
+          "ssim": 0.4180002317524054
+        },
+        "runtime_ms": 40.693100076168776,
+        "readability": {
+          "segmented_crops": 0,
+          "expected_chars": 10,
+          "segmentation_status": "failed_empty"
+        },
+        "failures": [
+          "excessive_clipping_18.5pct",
+          "failed_segmentation"
+        ]
+      },
+      "richardson_lucy_oracle": {
+        "best_param": 100,
+        "metrics": {
+          "rmse": 0.22958852258735957,
+          "psnr": 12.780996532934832,
+          "ssim": 0.44508438901337566
+        },
+        "runtime_ms": 176.2559999478981,
+        "readability": {
+          "segmented_crops": 0,
+          "expected_chars": 10,
+          "segmentation_status": "failed_empty"
+        },
+        "failures": [
+          "excessive_clipping_21.3pct",
+          "failed_segmentation"
+        ]
+      }
+    }
+  },
+  {
+    "cell_id": "C11",
+    "trial_idx": 3,
+    "plate_idx": 3,
+    "text": "UP 63 PP 9350",
+    "degraded": {
+      "metrics": {
+        "rmse": 0.31123453903153214,
+        "psnr": 10.138244269735626,
+        "ssim": 0.3839063400579757
+      },
+      "readability": {
+        "segmented_crops": 0,
+        "expected_chars": 10,
+        "segmentation_status": "failed_empty"
+      },
+      "measured_bsnr": null
+    },
+    "restorations": {
+      "wiener_deployable": {
+        "param": 0.001,
+        "metrics": {
+          "rmse": 0.16822523091890673,
+          "psnr": 15.482177337577456,
+          "ssim": 0.5152863956210001
+        },
+        "runtime_ms": 3.25660000089556,
+        "readability": {
+          "segmented_crops": 2,
+          "expected_chars": 10,
+          "segmentation_status": "under_segmented_merging"
+        },
+        "failures": [
+          "excessive_clipping_24.3pct",
+          "character_merging"
+        ]
+      },
+      "wiener_oracle": {
+        "best_param": 0.001,
+        "metrics": {
+          "rmse": 0.16822523091890673,
+          "psnr": 15.482177337577456,
+          "ssim": 0.5152863956210001
+        },
+        "runtime_ms": 2.875699894502759,
+        "readability": {
+          "segmented_crops": 2,
+          "expected_chars": 10,
+          "segmentation_status": "under_segmented_merging"
+        },
+        "failures": [
+          "excessive_clipping_24.3pct",
+          "character_merging"
+        ]
+      },
+      "cls_deployable": {
+        "param": 0.001,
+        "metrics": {
+          "rmse": 0.15473129426280088,
+          "psnr": 16.208436835103683,
+          "ssim": 0.5607105499556366
+        },
+        "runtime_ms": 3.361299983225763,
+        "readability": {
+          "segmented_crops": 6,
+          "expected_chars": 10,
+          "segmentation_status": "under_segmented_merging"
+        },
+        "failures": [
+          "excessive_clipping_26.9pct",
+          "character_merging"
+        ]
+      },
+      "cls_oracle": {
+        "best_param": 0.001,
+        "metrics": {
+          "rmse": 0.15473129426280088,
+          "psnr": 16.208436835103683,
+          "ssim": 0.5607105499556366
+        },
+        "runtime_ms": 2.989899949170649,
+        "readability": {
+          "segmented_crops": 6,
+          "expected_chars": 10,
+          "segmentation_status": "under_segmented_merging"
+        },
+        "failures": [
+          "excessive_clipping_26.9pct",
+          "character_merging"
+        ]
+      },
+      "richardson_lucy_deployable": {
+        "param": 20,
+        "metrics": {
+          "rmse": 0.26789123477498616,
+          "psnr": 11.44082991978294,
+          "ssim": 0.43451239377511375
+        },
+        "runtime_ms": 38.261599955148995,
+        "readability": {
+          "segmented_crops": 0,
+          "expected_chars": 10,
+          "segmentation_status": "failed_empty"
+        },
+        "failures": [
+          "excessive_clipping_19.1pct",
+          "failed_segmentation"
+        ]
+      },
+      "richardson_lucy_oracle": {
+        "best_param": 100,
+        "metrics": {
+          "rmse": 0.22773088307648162,
+          "psnr": 12.85156139558294,
+          "ssim": 0.4620936994293603
+        },
+        "runtime_ms": 181.82549998164177,
+        "readability": {
+          "segmented_crops": 0,
+          "expected_chars": 10,
+          "segmentation_status": "failed_empty"
+        },
+        "failures": [
+          "excessive_clipping_22.1pct",
+          "failed_segmentation"
+        ]
+      }
+    }
+  },
+  {
+    "cell_id": "C11",
+    "trial_idx": 4,
+    "plate_idx": 4,
+    "text": "JH 81 SA 3941",
+    "degraded": {
+      "metrics": {
+        "rmse": 0.3079581275308407,
+        "psnr": 10.230166593272408,
+        "ssim": 0.39309824915431446
+      },
+      "readability": {
+        "segmented_crops": 0,
+        "expected_chars": 10,
+        "segmentation_status": "failed_empty"
+      },
+      "measured_bsnr": null
+    },
+    "restorations": {
+      "wiener_deployable": {
+        "param": 0.001,
+        "metrics": {
+          "rmse": 0.17644853139437722,
+          "psnr": 15.067639039644687,
+          "ssim": 0.4892070002975279
+        },
+        "runtime_ms": 2.57939996663481,
+        "readability": {
+          "segmented_crops": 5,
+          "expected_chars": 10,
+          "segmentation_status": "under_segmented_merging"
+        },
+        "failures": [
+          "excessive_clipping_24.2pct",
+          "character_merging"
+        ]
+      },
+      "wiener_oracle": {
+        "best_param": 0.001,
+        "metrics": {
+          "rmse": 0.17644853139437722,
+          "psnr": 15.067639039644687,
+          "ssim": 0.4892070002975279
+        },
+        "runtime_ms": 1.7042000545188785,
+        "readability": {
+          "segmented_crops": 5,
+          "expected_chars": 10,
+          "segmentation_status": "under_segmented_merging"
+        },
+        "failures": [
+          "excessive_clipping_24.2pct",
+          "character_merging"
+        ]
+      },
+      "cls_deployable": {
+        "param": 0.001,
+        "metrics": {
+          "rmse": 0.1765259268326675,
+          "psnr": 15.06382999210267,
+          "ssim": 0.516451924635942
+        },
+        "runtime_ms": 2.6856999611482024,
+        "readability": {
+          "segmented_crops": 9,
+          "expected_chars": 10,
+          "segmentation_status": "under_segmented_merging"
+        },
+        "failures": [
+          "excessive_clipping_27.6pct"
+        ]
+      },
+      "cls_oracle": {
+        "best_param": 0.001,
+        "metrics": {
+          "rmse": 0.1765259268326675,
+          "psnr": 15.06382999210267,
+          "ssim": 0.516451924635942
+        },
+        "runtime_ms": 3.2423000084236264,
+        "readability": {
+          "segmented_crops": 9,
+          "expected_chars": 10,
+          "segmentation_status": "under_segmented_merging"
+        },
+        "failures": [
+          "excessive_clipping_27.6pct"
+        ]
+      },
+      "richardson_lucy_deployable": {
+        "param": 20,
+        "metrics": {
+          "rmse": 0.26670471030247134,
+          "psnr": 11.479386282354936,
+          "ssim": 0.4250471969695466
+        },
+        "runtime_ms": 39.59850000683218,
+        "readability": {
+          "segmented_crops": 0,
+          "expected_chars": 10,
+          "segmentation_status": "failed_empty"
+        },
+        "failures": [
+          "excessive_clipping_19.0pct",
+          "failed_segmentation"
+        ]
+      },
+      "richardson_lucy_oracle": {
+        "best_param": 100,
+        "metrics": {
+          "rmse": 0.2294305519688156,
+          "psnr": 12.78697500088511,
+          "ssim": 0.44527951671786004
+        },
+        "runtime_ms": 192.0460999244824,
+        "readability": {
+          "segmented_crops": 0,
+          "expected_chars": 10,
+          "segmentation_status": "failed_empty"
+        },
+        "failures": [
+          "excessive_clipping_22.4pct",
+          "failed_segmentation"
+        ]
+      }
+    }
+  },
+  {
+    "cell_id": "C11",
+    "trial_idx": 5,
+    "plate_idx": 5,
+    "text": "DN 55 AU 7296",
+    "degraded": {
+      "metrics": {
+        "rmse": 0.3132682582305405,
+        "psnr": 10.081672151755747,
+        "ssim": 0.38088021874605243
+      },
+      "readability": {
+        "segmented_crops": 0,
+        "expected_chars": 10,
+        "segmentation_status": "failed_empty"
+      },
+      "measured_bsnr": null
+    },
+    "restorations": {
+      "wiener_deployable": {
+        "param": 0.001,
+        "metrics": {
+          "rmse": 0.18196890938303945,
+          "psnr": 14.800056156431964,
+          "ssim": 0.4954342100473241
+        },
+        "runtime_ms": 2.101800055243075,
+        "readability": {
+          "segmented_crops": 4,
+          "expected_chars": 10,
+          "segmentation_status": "under_segmented_merging"
+        },
+        "failures": [
+          "excessive_clipping_23.3pct",
+          "character_merging"
+        ]
+      },
+      "wiener_oracle": {
+        "best_param": 0.001,
+        "metrics": {
+          "rmse": 0.18196890938303945,
+          "psnr": 14.800056156431964,
+          "ssim": 0.4954342100473241
+        },
+        "runtime_ms": 2.091499976813793,
+        "readability": {
+          "segmented_crops": 4,
+          "expected_chars": 10,
+          "segmentation_status": "under_segmented_merging"
+        },
+        "failures": [
+          "excessive_clipping_23.3pct",
+          "character_merging"
+        ]
+      },
+      "cls_deployable": {
+        "param": 0.001,
+        "metrics": {
+          "rmse": 0.16870633026112894,
+          "psnr": 15.457372426949155,
+          "ssim": 0.5263354244814065
+        },
+        "runtime_ms": 3.8995000068098307,
+        "readability": {
+          "segmented_crops": 7,
+          "expected_chars": 10,
+          "segmentation_status": "under_segmented_merging"
+        },
+        "failures": [
+          "excessive_clipping_25.5pct",
+          "character_merging"
+        ]
+      },
+      "cls_oracle": {
+        "best_param": 0.001,
+        "metrics": {
+          "rmse": 0.16870633026112894,
+          "psnr": 15.457372426949155,
+          "ssim": 0.5263354244814065
+        },
+        "runtime_ms": 2.090599969960749,
+        "readability": {
+          "segmented_crops": 7,
+          "expected_chars": 10,
+          "segmentation_status": "under_segmented_merging"
+        },
+        "failures": [
+          "excessive_clipping_25.5pct",
+          "character_merging"
+        ]
+      },
+      "richardson_lucy_deployable": {
+        "param": 20,
+        "metrics": {
+          "rmse": 0.27324115098903234,
+          "psnr": 11.269077878607284,
+          "ssim": 0.4207252656943755
+        },
+        "runtime_ms": 37.66089992132038,
+        "readability": {
+          "segmented_crops": 0,
+          "expected_chars": 10,
+          "segmentation_status": "failed_empty"
+        },
+        "failures": [
+          "excessive_clipping_18.7pct",
+          "failed_segmentation"
+        ]
+      },
+      "richardson_lucy_oracle": {
+        "best_param": 100,
+        "metrics": {
+          "rmse": 0.23826867685864175,
+          "psnr": 12.458660937508498,
+          "ssim": 0.4406475996683563
+        },
+        "runtime_ms": 207.02370000071824,
+        "readability": {
+          "segmented_crops": 0,
+          "expected_chars": 10,
+          "segmentation_status": "failed_empty"
+        },
+        "failures": [
+          "excessive_clipping_21.2pct",
+          "failed_segmentation"
+        ]
+      }
+    }
+  },
+  {
+    "cell_id": "C11",
+    "trial_idx": 6,
+    "plate_idx": 6,
+    "text": "CH 17 CW 0221",
+    "degraded": {
+      "metrics": {
+        "rmse": 0.297507319080191,
+        "psnr": 10.530046911512674,
+        "ssim": 0.4174937295839818
+      },
+      "readability": {
+        "segmented_crops": 0,
+        "expected_chars": 10,
+        "segmentation_status": "failed_empty"
+      },
+      "measured_bsnr": null
+    },
+    "restorations": {
+      "wiener_deployable": {
+        "param": 0.001,
+        "metrics": {
+          "rmse": 0.17340533412192488,
+          "psnr": 15.218750946413326,
+          "ssim": 0.4952344626439833
+        },
+        "runtime_ms": 2.648100024089217,
+        "readability": {
+          "segmented_crops": 4,
+          "expected_chars": 10,
+          "segmentation_status": "under_segmented_merging"
+        },
+        "failures": [
+          "excessive_clipping_25.4pct",
+          "character_merging"
+        ]
+      },
+      "wiener_oracle": {
+        "best_param": 0.001,
+        "metrics": {
+          "rmse": 0.17340533412192488,
+          "psnr": 15.218750946413326,
+          "ssim": 0.4952344626439833
+        },
+        "runtime_ms": 1.526899985037744,
+        "readability": {
+          "segmented_crops": 4,
+          "expected_chars": 10,
+          "segmentation_status": "under_segmented_merging"
+        },
+        "failures": [
+          "excessive_clipping_25.4pct",
+          "character_merging"
+        ]
+      },
+      "cls_deployable": {
+        "param": 0.001,
+        "metrics": {
+          "rmse": 0.15725589538191567,
+          "psnr": 16.067861285368743,
+          "ssim": 0.5257078457903077
+        },
+        "runtime_ms": 2.5984999956563115,
+        "readability": {
+          "segmented_crops": 7,
+          "expected_chars": 10,
+          "segmentation_status": "under_segmented_merging"
+        },
+        "failures": [
+          "excessive_clipping_27.6pct",
+          "character_merging"
+        ]
+      },
+      "cls_oracle": {
+        "best_param": 0.001,
+        "metrics": {
+          "rmse": 0.15725589538191567,
+          "psnr": 16.067861285368743,
+          "ssim": 0.5257078457903077
+        },
+        "runtime_ms": 2.767500001937151,
+        "readability": {
+          "segmented_crops": 7,
+          "expected_chars": 10,
+          "segmentation_status": "under_segmented_merging"
+        },
+        "failures": [
+          "excessive_clipping_27.6pct",
+          "character_merging"
+        ]
+      },
+      "richardson_lucy_deployable": {
+        "param": 20,
+        "metrics": {
+          "rmse": 0.25923589339401987,
+          "psnr": 11.726097338147417,
+          "ssim": 0.4599838944079411
+        },
+        "runtime_ms": 34.84879992902279,
+        "readability": {
+          "segmented_crops": 0,
+          "expected_chars": 10,
+          "segmentation_status": "failed_empty"
+        },
+        "failures": [
+          "excessive_clipping_19.6pct",
+          "failed_segmentation"
+        ]
+      },
+      "richardson_lucy_oracle": {
+        "best_param": 100,
+        "metrics": {
+          "rmse": 0.22369125501132617,
+          "psnr": 13.007019877706385,
+          "ssim": 0.4527804409939474
+        },
+        "runtime_ms": 166.15349997300655,
+        "readability": {
+          "segmented_crops": 0,
+          "expected_chars": 10,
+          "segmentation_status": "failed_empty"
+        },
+        "failures": [
+          "excessive_clipping_22.5pct",
+          "failed_segmentation"
+        ]
+      }
+    }
+  },
+  {
+    "cell_id": "C11",
+    "trial_idx": 7,
+    "plate_idx": 7,
+    "text": "OD 08 HM 4226",
+    "degraded": {
+      "metrics": {
+        "rmse": 0.3086508561669579,
+        "psnr": 10.210650280104955,
+        "ssim": 0.39784847532092993
+      },
+      "readability": {
+        "segmented_crops": 0,
+        "expected_chars": 10,
+        "segmentation_status": "failed_empty"
+      },
+      "measured_bsnr": null
+    },
+    "restorations": {
+      "wiener_deployable": {
+        "param": 0.001,
+        "metrics": {
+          "rmse": 0.17596409829307114,
+          "psnr": 15.09151863277382,
+          "ssim": 0.5026043388835421
+        },
+        "runtime_ms": 1.920499955303967,
+        "readability": {
+          "segmented_crops": 3,
+          "expected_chars": 10,
+          "segmentation_status": "under_segmented_merging"
+        },
+        "failures": [
+          "excessive_clipping_23.6pct",
+          "character_merging"
+        ]
+      },
+      "wiener_oracle": {
+        "best_param": 0.001,
+        "metrics": {
+          "rmse": 0.17596409829307114,
+          "psnr": 15.09151863277382,
+          "ssim": 0.5026043388835421
+        },
+        "runtime_ms": 1.8503000028431416,
+        "readability": {
+          "segmented_crops": 3,
+          "expected_chars": 10,
+          "segmentation_status": "under_segmented_merging"
+        },
+        "failures": [
+          "excessive_clipping_23.6pct",
+          "character_merging"
+        ]
+      },
+      "cls_deployable": {
+        "param": 0.001,
+        "metrics": {
+          "rmse": 0.15981004175617233,
+          "psnr": 15.927918700406014,
+          "ssim": 0.5369744376272021
+        },
+        "runtime_ms": 2.679400029592216,
+        "readability": {
+          "segmented_crops": 7,
+          "expected_chars": 10,
+          "segmentation_status": "under_segmented_merging"
+        },
+        "failures": [
+          "excessive_clipping_25.7pct",
+          "character_merging"
+        ]
+      },
+      "cls_oracle": {
+        "best_param": 0.001,
+        "metrics": {
+          "rmse": 0.15981004175617233,
+          "psnr": 15.927918700406014,
+          "ssim": 0.5369744376272021
+        },
+        "runtime_ms": 2.2752999793738127,
+        "readability": {
+          "segmented_crops": 7,
+          "expected_chars": 10,
+          "segmentation_status": "under_segmented_merging"
+        },
+        "failures": [
+          "excessive_clipping_25.7pct",
+          "character_merging"
+        ]
+      },
+      "richardson_lucy_deployable": {
+        "param": 20,
+        "metrics": {
+          "rmse": 0.2690254323446575,
+          "psnr": 11.40413323973964,
+          "ssim": 0.4453786217231513
+        },
+        "runtime_ms": 33.73479994479567,
+        "readability": {
+          "segmented_crops": 0,
+          "expected_chars": 10,
+          "segmentation_status": "failed_empty"
+        },
+        "failures": [
+          "excessive_clipping_19.6pct",
+          "failed_segmentation"
+        ]
+      },
+      "richardson_lucy_oracle": {
+        "best_param": 100,
+        "metrics": {
+          "rmse": 0.23328618484022784,
+          "psnr": 12.6422195854886,
+          "ssim": 0.44405620199644374
+        },
+        "runtime_ms": 167.78460005298257,
+        "readability": {
+          "segmented_crops": 0,
+          "expected_chars": 10,
+          "segmentation_status": "failed_empty"
+        },
+        "failures": [
+          "excessive_clipping_21.9pct",
+          "failed_segmentation"
+        ]
+      }
+    }
+  },
+  {
+    "cell_id": "C11",
+    "trial_idx": 8,
+    "plate_idx": 8,
+    "text": "MN 02 AC 0082",
+    "degraded": {
+      "metrics": {
+        "rmse": 0.3111613230321022,
+        "psnr": 10.140287811900619,
+        "ssim": 0.38120427795996903
+      },
+      "readability": {
+        "segmented_crops": 0,
+        "expected_chars": 10,
+        "segmentation_status": "failed_empty"
+      },
+      "measured_bsnr": null
+    },
+    "restorations": {
+      "wiener_deployable": {
+        "param": 0.001,
+        "metrics": {
+          "rmse": 0.18390342216290176,
+          "psnr": 14.708203782542844,
+          "ssim": 0.4979820489449491
+        },
+        "runtime_ms": 2.5297999382019043,
+        "readability": {
+          "segmented_crops": 1,
+          "expected_chars": 10,
+          "segmentation_status": "under_segmented_merging"
+        },
+        "failures": [
+          "excessive_clipping_23.6pct",
+          "character_merging"
+        ]
+      },
+      "wiener_oracle": {
+        "best_param": 0.001,
+        "metrics": {
+          "rmse": 0.18390342216290176,
+          "psnr": 14.708203782542844,
+          "ssim": 0.4979820489449491
+        },
+        "runtime_ms": 1.561500015668571,
+        "readability": {
+          "segmented_crops": 1,
+          "expected_chars": 10,
+          "segmentation_status": "under_segmented_merging"
+        },
+        "failures": [
+          "excessive_clipping_23.6pct",
+          "character_merging"
+        ]
+      },
+      "cls_deployable": {
+        "param": 0.001,
+        "metrics": {
+          "rmse": 0.17770879865007722,
+          "psnr": 15.005821380801326,
+          "ssim": 0.5196314532375103
+        },
+        "runtime_ms": 2.424199949018657,
+        "readability": {
+          "segmented_crops": 11,
+          "expected_chars": 10,
+          "segmentation_status": "over_segmented_fragmentation"
+        },
+        "failures": [
+          "excessive_clipping_26.2pct"
+        ]
+      },
+      "cls_oracle": {
+        "best_param": 0.001,
+        "metrics": {
+          "rmse": 0.17770879865007722,
+          "psnr": 15.005821380801326,
+          "ssim": 0.5196314532375103
+        },
+        "runtime_ms": 2.154999994672835,
+        "readability": {
+          "segmented_crops": 11,
+          "expected_chars": 10,
+          "segmentation_status": "over_segmented_fragmentation"
+        },
+        "failures": [
+          "excessive_clipping_26.2pct"
+        ]
+      },
+      "richardson_lucy_deployable": {
+        "param": 20,
+        "metrics": {
+          "rmse": 0.27679745884732526,
+          "psnr": 11.156758025176272,
+          "ssim": 0.4219417641541712
+        },
+        "runtime_ms": 38.0930999526754,
+        "readability": {
+          "segmented_crops": 0,
+          "expected_chars": 10,
+          "segmentation_status": "failed_empty"
+        },
+        "failures": [
+          "excessive_clipping_19.4pct",
+          "failed_segmentation"
+        ]
+      },
+      "richardson_lucy_oracle": {
+        "best_param": 100,
+        "metrics": {
+          "rmse": 0.24328500198764766,
+          "psnr": 12.27769327183768,
+          "ssim": 0.4319149039037482
+        },
+        "runtime_ms": 176.07439996208996,
+        "readability": {
+          "segmented_crops": 0,
+          "expected_chars": 10,
+          "segmentation_status": "failed_empty"
+        },
+        "failures": [
+          "excessive_clipping_21.4pct",
+          "failed_segmentation"
+        ]
+      }
+    }
+  },
+  {
+    "cell_id": "C11",
+    "trial_idx": 9,
+    "plate_idx": 9,
+    "text": "TS 52 RG 6153",
+    "degraded": {
+      "metrics": {
+        "rmse": 0.31619124738115356,
+        "psnr": 10.001003122401194,
+        "ssim": 0.3748087753391753
+      },
+      "readability": {
+        "segmented_crops": 0,
+        "expected_chars": 10,
+        "segmentation_status": "failed_empty"
+      },
+      "measured_bsnr": null
+    },
+    "restorations": {
+      "wiener_deployable": {
+        "param": 0.001,
+        "metrics": {
+          "rmse": 0.1637848565143887,
+          "psnr": 15.714525108443567,
+          "ssim": 0.5330594653867142
+        },
+        "runtime_ms": 2.8413000982254744,
+        "readability": {
+          "segmented_crops": 4,
+          "expected_chars": 10,
+          "segmentation_status": "under_segmented_merging"
+        },
+        "failures": [
+          "excessive_clipping_24.2pct",
+          "character_merging"
+        ]
+      },
+      "wiener_oracle": {
+        "best_param": 0.001,
+        "metrics": {
+          "rmse": 0.1637848565143887,
+          "psnr": 15.714525108443567,
+          "ssim": 0.5330594653867142
+        },
+        "runtime_ms": 1.485800021328032,
+        "readability": {
+          "segmented_crops": 4,
+          "expected_chars": 10,
+          "segmentation_status": "under_segmented_merging"
+        },
+        "failures": [
+          "excessive_clipping_24.2pct",
+          "character_merging"
+        ]
+      },
+      "cls_deployable": {
+        "param": 0.001,
+        "metrics": {
+          "rmse": 0.15510287110621782,
+          "psnr": 16.187603257906293,
+          "ssim": 0.5668611827050272
+        },
+        "runtime_ms": 3.6986999912187457,
+        "readability": {
+          "segmented_crops": 8,
+          "expected_chars": 10,
+          "segmentation_status": "under_segmented_merging"
+        },
+        "failures": [
+          "excessive_clipping_27.2pct",
+          "character_merging"
+        ]
+      },
+      "cls_oracle": {
+        "best_param": 0.001,
+        "metrics": {
+          "rmse": 0.15510287110621782,
+          "psnr": 16.187603257906293,
+          "ssim": 0.5668611827050272
+        },
+        "runtime_ms": 1.9272000063210726,
+        "readability": {
+          "segmented_crops": 8,
+          "expected_chars": 10,
+          "segmentation_status": "under_segmented_merging"
+        },
+        "failures": [
+          "excessive_clipping_27.2pct",
+          "character_merging"
+        ]
+      },
+      "richardson_lucy_deployable": {
+        "param": 20,
+        "metrics": {
+          "rmse": 0.2662436936276996,
+          "psnr": 11.494413406660522,
+          "ssim": 0.4285698418175563
+        },
+        "runtime_ms": 33.01430004648864,
+        "readability": {
+          "segmented_crops": 0,
+          "expected_chars": 10,
+          "segmentation_status": "failed_empty"
+        },
+        "failures": [
+          "excessive_clipping_19.0pct",
+          "failed_segmentation"
+        ]
+      },
+      "richardson_lucy_oracle": {
+        "best_param": 100,
+        "metrics": {
+          "rmse": 0.22266826770112594,
+          "psnr": 13.046833391175936,
+          "ssim": 0.46491137434974295
+        },
+        "runtime_ms": 173.16080001182854,
+        "readability": {
+          "segmented_crops": 2,
+          "expected_chars": 10,
+          "segmentation_status": "under_segmented_merging"
+        },
+        "failures": [
+          "excessive_clipping_22.1pct",
+          "character_merging"
+        ]
+      }
+    }
+  },
+  {
+    "cell_id": "C11",
+    "trial_idx": 10,
+    "plate_idx": 10,
+    "text": "UK 38 MZ 8049",
+    "degraded": {
+      "metrics": {
+        "rmse": 0.3167102702744272,
+        "psnr": 9.98675706213606,
+        "ssim": 0.3691966736901572
+      },
+      "readability": {
+        "segmented_crops": 0,
+        "expected_chars": 10,
+        "segmentation_status": "failed_empty"
+      },
+      "measured_bsnr": null
+    },
+    "restorations": {
+      "wiener_deployable": {
+        "param": 0.001,
+        "metrics": {
+          "rmse": 0.1878620968581521,
+          "psnr": 14.523216690255769,
+          "ssim": 0.4868506565874209
+        },
+        "runtime_ms": 1.9524999661371112,
+        "readability": {
+          "segmented_crops": 2,
+          "expected_chars": 10,
+          "segmentation_status": "under_segmented_merging"
+        },
+        "failures": [
+          "excessive_clipping_21.8pct",
+          "character_merging"
+        ]
+      },
+      "wiener_oracle": {
+        "best_param": 0.001,
+        "metrics": {
+          "rmse": 0.1878620968581521,
+          "psnr": 14.523216690255769,
+          "ssim": 0.4868506565874209
+        },
+        "runtime_ms": 1.6078000189736485,
+        "readability": {
+          "segmented_crops": 2,
+          "expected_chars": 10,
+          "segmentation_status": "under_segmented_merging"
+        },
+        "failures": [
+          "excessive_clipping_21.8pct",
+          "character_merging"
+        ]
+      },
+      "cls_deployable": {
+        "param": 0.001,
+        "metrics": {
+          "rmse": 0.17843949891467245,
+          "psnr": 14.970180099877,
+          "ssim": 0.5016239302681715
+        },
+        "runtime_ms": 2.587100025266409,
+        "readability": {
+          "segmented_crops": 6,
+          "expected_chars": 10,
+          "segmentation_status": "under_segmented_merging"
+        },
+        "failures": [
+          "excessive_clipping_24.3pct",
+          "character_merging"
+        ]
+      },
+      "cls_oracle": {
+        "best_param": 0.001,
+        "metrics": {
+          "rmse": 0.17843949891467245,
+          "psnr": 14.970180099877,
+          "ssim": 0.5016239302681715
+        },
+        "runtime_ms": 2.1212000865489244,
+        "readability": {
+          "segmented_crops": 6,
+          "expected_chars": 10,
+          "segmentation_status": "under_segmented_merging"
+        },
+        "failures": [
+          "excessive_clipping_24.3pct",
+          "character_merging"
+        ]
+      },
+      "richardson_lucy_deployable": {
+        "param": 20,
+        "metrics": {
+          "rmse": 0.2807598163197809,
+          "psnr": 11.033301007724745,
+          "ssim": 0.40527864386801166
+        },
+        "runtime_ms": 35.82499991171062,
+        "readability": {
+          "segmented_crops": 0,
+          "expected_chars": 10,
+          "segmentation_status": "failed_empty"
+        },
+        "failures": [
+          "excessive_clipping_19.0pct",
+          "failed_segmentation"
+        ]
+      },
+      "richardson_lucy_oracle": {
+        "best_param": 100,
+        "metrics": {
+          "rmse": 0.24594517190118234,
+          "psnr": 12.183233971322966,
+          "ssim": 0.43261662369875176
+        },
+        "runtime_ms": 178.66819992195815,
+        "readability": {
+          "segmented_crops": 0,
+          "expected_chars": 10,
+          "segmentation_status": "failed_empty"
+        },
+        "failures": [
+          "excessive_clipping_20.6pct",
+          "failed_segmentation"
+        ]
+      }
+    }
+  },
+  {
+    "cell_id": "C11",
+    "trial_idx": 11,
+    "plate_idx": 11,
+    "text": "PY 37 SY 6504",
+    "degraded": {
+      "metrics": {
+        "rmse": 0.30721220217566075,
+        "psnr": 10.251230770706803,
+        "ssim": 0.39797642055449467
+      },
+      "readability": {
+        "segmented_crops": 0,
+        "expected_chars": 10,
+        "segmentation_status": "failed_empty"
+      },
+      "measured_bsnr": null
+    },
+    "restorations": {
+      "wiener_deployable": {
+        "param": 0.001,
+        "metrics": {
+          "rmse": 0.17173218608374513,
+          "psnr": 15.302966032881788,
+          "ssim": 0.5109109951646772
+        },
+        "runtime_ms": 3.1425999477505684,
+        "readability": {
+          "segmented_crops": 0,
+          "expected_chars": 10,
+          "segmentation_status": "failed_empty"
+        },
+        "failures": [
+          "excessive_clipping_24.7pct",
+          "failed_segmentation"
+        ]
+      },
+      "wiener_oracle": {
+        "best_param": 0.001,
+        "metrics": {
+          "rmse": 0.17173218608374513,
+          "psnr": 15.302966032881788,
+          "ssim": 0.5109109951646772
+        },
+        "runtime_ms": 2.874900004826486,
+        "readability": {
+          "segmented_crops": 0,
+          "expected_chars": 10,
+          "segmentation_status": "failed_empty"
+        },
+        "failures": [
+          "excessive_clipping_24.7pct",
+          "failed_segmentation"
+        ]
+      },
+      "cls_deployable": {
+        "param": 0.001,
+        "metrics": {
+          "rmse": 0.17608159162659023,
+          "psnr": 15.085720895745546,
+          "ssim": 0.5334549429919871
+        },
+        "runtime_ms": 2.0985999144613743,
+        "readability": {
+          "segmented_crops": 8,
+          "expected_chars": 10,
+          "segmentation_status": "under_segmented_merging"
+        },
+        "failures": [
+          "excessive_clipping_27.9pct",
+          "character_merging"
+        ]
+      },
+      "cls_oracle": {
+        "best_param": 0.01,
+        "metrics": {
+          "rmse": 0.17299205897090877,
+          "psnr": 15.239476645432111,
+          "ssim": 0.5930289593605278
+        },
+        "runtime_ms": 2.8547000838443637,
+        "readability": {
+          "segmented_crops": 8,
+          "expected_chars": 10,
+          "segmentation_status": "under_segmented_merging"
+        },
+        "failures": [
+          "excessive_clipping_26.6pct",
+          "character_merging"
+        ]
+      },
+      "richardson_lucy_deployable": {
+        "param": 20,
+        "metrics": {
+          "rmse": 0.2660016052552904,
+          "psnr": 11.502314849979332,
+          "ssim": 0.43950916966582726
+        },
+        "runtime_ms": 37.40619996096939,
+        "readability": {
+          "segmented_crops": 0,
+          "expected_chars": 10,
+          "segmentation_status": "failed_empty"
+        },
+        "failures": [
+          "excessive_clipping_19.0pct",
+          "failed_segmentation"
+        ]
+      },
+      "richardson_lucy_oracle": {
+        "best_param": 100,
+        "metrics": {
+          "rmse": 0.2267045143008643,
+          "psnr": 12.890796636160866,
+          "ssim": 0.4651100037553779
+        },
+        "runtime_ms": 172.03490005340427,
+        "readability": {
+          "segmented_crops": 0,
+          "expected_chars": 10,
+          "segmentation_status": "failed_empty"
+        },
+        "failures": [
+          "excessive_clipping_22.2pct",
+          "failed_segmentation"
+        ]
+      }
+    }
+  },
+  {
+    "cell_id": "C11",
+    "trial_idx": 12,
+    "plate_idx": 12,
+    "text": "CH 68 SK 8751",
+    "degraded": {
+      "metrics": {
+        "rmse": 0.3136831467963956,
+        "psnr": 10.0701762788946,
+        "ssim": 0.38032316800077803
+      },
+      "readability": {
+        "segmented_crops": 0,
+        "expected_chars": 10,
+        "segmentation_status": "failed_empty"
+      },
+      "measured_bsnr": null
+    },
+    "restorations": {
+      "wiener_deployable": {
+        "param": 0.001,
+        "metrics": {
+          "rmse": 0.1688088544552588,
+          "psnr": 15.452095545178153,
+          "ssim": 0.5133707642851124
+        },
+        "runtime_ms": 2.2452999837696552,
+        "readability": {
+          "segmented_crops": 4,
+          "expected_chars": 10,
+          "segmentation_status": "under_segmented_merging"
+        },
+        "failures": [
+          "excessive_clipping_23.8pct",
+          "character_merging"
+        ]
+      },
+      "wiener_oracle": {
+        "best_param": 0.001,
+        "metrics": {
+          "rmse": 0.1688088544552588,
+          "psnr": 15.452095545178153,
+          "ssim": 0.5133707642851124
+        },
+        "runtime_ms": 1.5789000317454338,
+        "readability": {
+          "segmented_crops": 4,
+          "expected_chars": 10,
+          "segmentation_status": "under_segmented_merging"
+        },
+        "failures": [
+          "excessive_clipping_23.8pct",
+          "character_merging"
+        ]
+      },
+      "cls_deployable": {
+        "param": 0.001,
+        "metrics": {
+          "rmse": 0.16122222221184568,
+          "psnr": 15.85150194059082,
+          "ssim": 0.5475539862420746
+        },
+        "runtime_ms": 2.879299921914935,
+        "readability": {
+          "segmented_crops": 8,
+          "expected_chars": 10,
+          "segmentation_status": "under_segmented_merging"
+        },
+        "failures": [
+          "excessive_clipping_26.2pct",
+          "character_merging"
+        ]
+      },
+      "cls_oracle": {
+        "best_param": 0.001,
+        "metrics": {
+          "rmse": 0.16122222221184568,
+          "psnr": 15.85150194059082,
+          "ssim": 0.5475539862420746
+        },
+        "runtime_ms": 2.00920004863292,
+        "readability": {
+          "segmented_crops": 8,
+          "expected_chars": 10,
+          "segmentation_status": "under_segmented_merging"
+        },
+        "failures": [
+          "excessive_clipping_26.2pct",
+          "character_merging"
+        ]
+      },
+      "richardson_lucy_deployable": {
+        "param": 20,
+        "metrics": {
+          "rmse": 0.26945494521434327,
+          "psnr": 11.390276830737985,
+          "ssim": 0.4274454096748721
+        },
+        "runtime_ms": 33.976799924857914,
+        "readability": {
+          "segmented_crops": 0,
+          "expected_chars": 10,
+          "segmentation_status": "failed_empty"
+        },
+        "failures": [
+          "excessive_clipping_18.6pct",
+          "failed_segmentation"
+        ]
+      },
+      "richardson_lucy_oracle": {
+        "best_param": 100,
+        "metrics": {
+          "rmse": 0.22817055969788602,
+          "psnr": 12.834807845645852,
+          "ssim": 0.45462003562192727
+        },
+        "runtime_ms": 175.80279998946935,
+        "readability": {
+          "segmented_crops": 0,
+          "expected_chars": 10,
+          "segmentation_status": "failed_empty"
+        },
+        "failures": [
+          "excessive_clipping_21.6pct",
+          "failed_segmentation"
+        ]
+      }
+    }
+  },
+  {
+    "cell_id": "C11",
+    "trial_idx": 13,
+    "plate_idx": 13,
+    "text": "CG 57 TW 5253",
+    "degraded": {
+      "metrics": {
+        "rmse": 0.3014958412373303,
+        "psnr": 10.414373480767516,
+        "ssim": 0.4126464499866135
+      },
+      "readability": {
+        "segmented_crops": 0,
+        "expected_chars": 10,
+        "segmentation_status": "failed_empty"
+      },
+      "measured_bsnr": null
+    },
+    "restorations": {
+      "wiener_deployable": {
+        "param": 0.001,
+        "metrics": {
+          "rmse": 0.171106913197298,
+          "psnr": 15.334648867882134,
+          "ssim": 0.508936177546423
+        },
+        "runtime_ms": 2.1542999893426895,
+        "readability": {
+          "segmented_crops": 1,
+          "expected_chars": 10,
+          "segmentation_status": "under_segmented_merging"
+        },
+        "failures": [
+          "excessive_clipping_24.1pct",
+          "character_merging"
+        ]
+      },
+      "wiener_oracle": {
+        "best_param": 0.001,
+        "metrics": {
+          "rmse": 0.171106913197298,
+          "psnr": 15.334648867882134,
+          "ssim": 0.508936177546423
+        },
+        "runtime_ms": 1.9109999993816018,
+        "readability": {
+          "segmented_crops": 1,
+          "expected_chars": 10,
+          "segmentation_status": "under_segmented_merging"
+        },
+        "failures": [
+          "excessive_clipping_24.1pct",
+          "character_merging"
+        ]
+      },
+      "cls_deployable": {
+        "param": 0.001,
+        "metrics": {
+          "rmse": 0.1566363449398504,
+          "psnr": 16.102149190973787,
+          "ssim": 0.5399847026333314
+        },
+        "runtime_ms": 2.498599933460355,
+        "readability": {
+          "segmented_crops": 4,
+          "expected_chars": 10,
+          "segmentation_status": "under_segmented_merging"
+        },
+        "failures": [
+          "excessive_clipping_26.3pct",
+          "character_merging"
+        ]
+      },
+      "cls_oracle": {
+        "best_param": 0.001,
+        "metrics": {
+          "rmse": 0.1566363449398504,
+          "psnr": 16.102149190973787,
+          "ssim": 0.5399847026333314
+        },
+        "runtime_ms": 2.081100014038384,
+        "readability": {
+          "segmented_crops": 4,
+          "expected_chars": 10,
+          "segmentation_status": "under_segmented_merging"
+        },
+        "failures": [
+          "excessive_clipping_26.3pct",
+          "character_merging"
+        ]
+      },
+      "richardson_lucy_deployable": {
+        "param": 20,
+        "metrics": {
+          "rmse": 0.26099942087514433,
+          "psnr": 11.66720912610857,
+          "ssim": 0.45614620491603275
+        },
+        "runtime_ms": 35.91540001798421,
+        "readability": {
+          "segmented_crops": 0,
+          "expected_chars": 10,
+          "segmentation_status": "failed_empty"
+        },
+        "failures": [
+          "excessive_clipping_20.1pct",
+          "failed_segmentation"
+        ]
+      },
+      "richardson_lucy_oracle": {
+        "best_param": 100,
+        "metrics": {
+          "rmse": 0.22412957453844065,
+          "psnr": 12.9900166656926,
+          "ssim": 0.458576374145612
+        },
+        "runtime_ms": 159.74130004178733,
+        "readability": {
+          "segmented_crops": 0,
+          "expected_chars": 10,
+          "segmentation_status": "failed_empty"
+        },
+        "failures": [
+          "excessive_clipping_22.6pct",
+          "failed_segmentation"
+        ]
+      }
+    }
+  },
+  {
+    "cell_id": "C11",
+    "trial_idx": 14,
+    "plate_idx": 14,
+    "text": "MH 31 LM 7188",
+    "degraded": {
+      "metrics": {
+        "rmse": 0.3095581864154625,
+        "psnr": 10.185154127445657,
+        "ssim": 0.39350004509189745
+      },
+      "readability": {
+        "segmented_crops": 0,
+        "expected_chars": 10,
+        "segmentation_status": "failed_empty"
+      },
+      "measured_bsnr": null
+    },
+    "restorations": {
+      "wiener_deployable": {
+        "param": 0.001,
+        "metrics": {
+          "rmse": 0.18535107956121938,
+          "psnr": 14.64009760233334,
+          "ssim": 0.4785562047022015
+        },
+        "runtime_ms": 2.190900035202503,
+        "readability": {
+          "segmented_crops": 6,
+          "expected_chars": 10,
+          "segmentation_status": "under_segmented_merging"
+        },
+        "failures": [
+          "excessive_clipping_23.7pct",
+          "character_merging"
+        ]
+      },
+      "wiener_oracle": {
+        "best_param": 0.001,
+        "metrics": {
+          "rmse": 0.18535107956121938,
+          "psnr": 14.64009760233334,
+          "ssim": 0.4785562047022015
+        },
+        "runtime_ms": 1.5317000215873122,
+        "readability": {
+          "segmented_crops": 6,
+          "expected_chars": 10,
+          "segmentation_status": "under_segmented_merging"
+        },
+        "failures": [
+          "excessive_clipping_23.7pct",
+          "character_merging"
+        ]
+      },
+      "cls_deployable": {
+        "param": 0.001,
+        "metrics": {
+          "rmse": 0.17861373244532536,
+          "psnr": 14.961703081854454,
+          "ssim": 0.5014226821089751
+        },
+        "runtime_ms": 3.438499988988042,
+        "readability": {
+          "segmented_crops": 8,
+          "expected_chars": 10,
+          "segmentation_status": "under_segmented_merging"
+        },
+        "failures": [
+          "excessive_clipping_27.1pct",
+          "character_merging"
+        ]
+      },
+      "cls_oracle": {
+        "best_param": 0.001,
+        "metrics": {
+          "rmse": 0.17861373244532536,
+          "psnr": 14.961703081854454,
+          "ssim": 0.5014226821089751
+        },
+        "runtime_ms": 3.445900045335293,
+        "readability": {
+          "segmented_crops": 8,
+          "expected_chars": 10,
+          "segmentation_status": "under_segmented_merging"
+        },
+        "failures": [
+          "excessive_clipping_27.1pct",
+          "character_merging"
+        ]
+      },
+      "richardson_lucy_deployable": {
+        "param": 20,
+        "metrics": {
+          "rmse": 0.2706216882363953,
+          "psnr": 11.352748019960428,
+          "ssim": 0.42780285508031324
+        },
+        "runtime_ms": 31.13130002748221,
+        "readability": {
+          "segmented_crops": 1,
+          "expected_chars": 10,
+          "segmentation_status": "under_segmented_merging"
+        },
+        "failures": [
+          "excessive_clipping_18.9pct",
+          "character_merging"
+        ]
+      },
+      "richardson_lucy_oracle": {
+        "best_param": 100,
+        "metrics": {
+          "rmse": 0.23510032346115317,
+          "psnr": 12.574935467071839,
+          "ssim": 0.4413000445295562
+        },
+        "runtime_ms": 158.4413000382483,
+        "readability": {
+          "segmented_crops": 3,
+          "expected_chars": 10,
+          "segmentation_status": "under_segmented_merging"
+        },
+        "failures": [
+          "excessive_clipping_22.3pct",
+          "character_merging"
+        ]
+      }
+    }
+  },
+  {
+    "cell_id": "C11",
+    "trial_idx": 15,
+    "plate_idx": 15,
+    "text": "DD 07 YN 3577",
+    "degraded": {
+      "metrics": {
+        "rmse": 0.30790791838206955,
+        "psnr": 10.231582846462228,
+        "ssim": 0.4007883144954739
+      },
+      "readability": {
+        "segmented_crops": 0,
+        "expected_chars": 10,
+        "segmentation_status": "failed_empty"
+      },
+      "measured_bsnr": null
+    },
+    "restorations": {
+      "wiener_deployable": {
+        "param": 0.001,
+        "metrics": {
+          "rmse": 0.17487732103360554,
+          "psnr": 15.145330167040452,
+          "ssim": 0.4986018412035317
+        },
+        "runtime_ms": 2.2373999236151576,
+        "readability": {
+          "segmented_crops": 4,
+          "expected_chars": 10,
+          "segmentation_status": "under_segmented_merging"
+        },
+        "failures": [
+          "excessive_clipping_23.5pct",
+          "character_merging"
+        ]
+      },
+      "wiener_oracle": {
+        "best_param": 0.001,
+        "metrics": {
+          "rmse": 0.17487732103360554,
+          "psnr": 15.145330167040452,
+          "ssim": 0.4986018412035317
+        },
+        "runtime_ms": 1.5149000100791454,
+        "readability": {
+          "segmented_crops": 4,
+          "expected_chars": 10,
+          "segmentation_status": "under_segmented_merging"
+        },
+        "failures": [
+          "excessive_clipping_23.5pct",
+          "character_merging"
+        ]
+      },
+      "cls_deployable": {
+        "param": 0.001,
+        "metrics": {
+          "rmse": 0.16108867167828245,
+          "psnr": 15.85869999243462,
+          "ssim": 0.5218799797101888
+        },
+        "runtime_ms": 2.377200056798756,
+        "readability": {
+          "segmented_crops": 6,
+          "expected_chars": 10,
+          "segmentation_status": "under_segmented_merging"
+        },
+        "failures": [
+          "excessive_clipping_26.3pct",
+          "character_merging"
+        ]
+      },
+      "cls_oracle": {
+        "best_param": 0.001,
+        "metrics": {
+          "rmse": 0.16108867167828245,
+          "psnr": 15.85869999243462,
+          "ssim": 0.5218799797101888
+        },
+        "runtime_ms": 1.9168999278917909,
+        "readability": {
+          "segmented_crops": 6,
+          "expected_chars": 10,
+          "segmentation_status": "under_segmented_merging"
+        },
+        "failures": [
+          "excessive_clipping_26.3pct",
+          "character_merging"
+        ]
+      },
+      "richardson_lucy_deployable": {
+        "param": 20,
+        "metrics": {
+          "rmse": 0.2691100854282245,
+          "psnr": 11.40140051787622,
+          "ssim": 0.4333629732759189
+        },
+        "runtime_ms": 33.156199962832034,
+        "readability": {
+          "segmented_crops": 0,
+          "expected_chars": 10,
+          "segmentation_status": "failed_empty"
+        },
+        "failures": [
+          "excessive_clipping_19.0pct",
+          "failed_segmentation"
+        ]
+      },
+      "richardson_lucy_oracle": {
+        "best_param": 100,
+        "metrics": {
+          "rmse": 0.2321351532579208,
+          "psnr": 12.685181748407464,
+          "ssim": 0.44768621520869023
+        },
+        "runtime_ms": 156.00560000166297,
+        "readability": {
+          "segmented_crops": 0,
+          "expected_chars": 10,
+          "segmentation_status": "failed_empty"
+        },
+        "failures": [
+          "excessive_clipping_21.8pct",
+          "failed_segmentation"
+        ]
+      }
+    }
+  },
+  {
+    "cell_id": "C11",
+    "trial_idx": 16,
+    "plate_idx": 16,
+    "text": "TS 57 GH 7195",
+    "degraded": {
+      "metrics": {
+        "rmse": 0.3084197462076488,
+        "psnr": 10.217156490859288,
+        "ssim": 0.3931612798732069
+      },
+      "readability": {
+        "segmented_crops": 0,
+        "expected_chars": 10,
+        "segmentation_status": "failed_empty"
+      },
+      "measured_bsnr": null
+    },
+    "restorations": {
+      "wiener_deployable": {
+        "param": 0.001,
+        "metrics": {
+          "rmse": 0.16607899363313214,
+          "psnr": 15.59370590920759,
+          "ssim": 0.5087826320241496
+        },
+        "runtime_ms": 2.248699893243611,
+        "readability": {
+          "segmented_crops": 4,
+          "expected_chars": 10,
+          "segmentation_status": "under_segmented_merging"
+        },
+        "failures": [
+          "excessive_clipping_24.9pct",
+          "character_merging"
+        ]
+      },
+      "wiener_oracle": {
+        "best_param": 0.001,
+        "metrics": {
+          "rmse": 0.16607899363313214,
+          "psnr": 15.59370590920759,
+          "ssim": 0.5087826320241496
+        },
+        "runtime_ms": 1.905699959024787,
+        "readability": {
+          "segmented_crops": 4,
+          "expected_chars": 10,
+          "segmentation_status": "under_segmented_merging"
+        },
+        "failures": [
+          "excessive_clipping_24.9pct",
+          "character_merging"
+        ]
+      },
+      "cls_deployable": {
+        "param": 0.001,
+        "metrics": {
+          "rmse": 0.1591553906985754,
+          "psnr": 15.963572939037846,
+          "ssim": 0.5347483420909686
+        },
+        "runtime_ms": 2.3535999935120344,
+        "readability": {
+          "segmented_crops": 6,
+          "expected_chars": 10,
+          "segmentation_status": "under_segmented_merging"
+        },
+        "failures": [
+          "excessive_clipping_27.6pct",
+          "character_merging"
+        ]
+      },
+      "cls_oracle": {
+        "best_param": 0.001,
+        "metrics": {
+          "rmse": 0.1591553906985754,
+          "psnr": 15.963572939037846,
+          "ssim": 0.5347483420909686
+        },
+        "runtime_ms": 3.1498000025749207,
+        "readability": {
+          "segmented_crops": 6,
+          "expected_chars": 10,
+          "segmentation_status": "under_segmented_merging"
+        },
+        "failures": [
+          "excessive_clipping_27.6pct",
+          "character_merging"
+        ]
+      },
+      "richardson_lucy_deployable": {
+        "param": 20,
+        "metrics": {
+          "rmse": 0.26023528628616704,
+          "psnr": 11.692676323024443,
+          "ssim": 0.4410045417265278
+        },
+        "runtime_ms": 32.37480006646365,
+        "readability": {
+          "segmented_crops": 0,
+          "expected_chars": 10,
+          "segmentation_status": "failed_empty"
+        },
+        "failures": [
+          "excessive_clipping_19.0pct",
+          "failed_segmentation"
+        ]
+      },
+      "richardson_lucy_oracle": {
+        "best_param": 100,
+        "metrics": {
+          "rmse": 0.22044751807161211,
+          "psnr": 13.13389572707942,
+          "ssim": 0.46348609982087985
+        },
+        "runtime_ms": 159.04599998611957,
+        "readability": {
+          "segmented_crops": 1,
+          "expected_chars": 10,
+          "segmentation_status": "under_segmented_merging"
+        },
+        "failures": [
+          "excessive_clipping_22.7pct",
+          "character_merging"
+        ]
+      }
+    }
+  },
+  {
+    "cell_id": "C11",
+    "trial_idx": 17,
+    "plate_idx": 17,
+    "text": "RJ 50 JU 3916",
+    "degraded": {
+      "metrics": {
+        "rmse": 0.3081342290229267,
+        "psnr": 10.225201109929712,
+        "ssim": 0.38755793839023767
+      },
+      "readability": {
+        "segmented_crops": 0,
+        "expected_chars": 10,
+        "segmentation_status": "failed_empty"
+      },
+      "measured_bsnr": null
+    },
+    "restorations": {
+      "wiener_deployable": {
+        "param": 0.001,
+        "metrics": {
+          "rmse": 0.16846259181702766,
+          "psnr": 15.469930438415638,
+          "ssim": 0.5129430205859588
+        },
+        "runtime_ms": 2.310600015334785,
+        "readability": {
+          "segmented_crops": 6,
+          "expected_chars": 10,
+          "segmentation_status": "under_segmented_merging"
+        },
+        "failures": [
+          "excessive_clipping_24.0pct",
+          "character_merging"
+        ]
+      },
+      "wiener_oracle": {
+        "best_param": 0.001,
+        "metrics": {
+          "rmse": 0.16846259181702766,
+          "psnr": 15.469930438415638,
+          "ssim": 0.5129430205859588
+        },
+        "runtime_ms": 2.007200033403933,
+        "readability": {
+          "segmented_crops": 6,
+          "expected_chars": 10,
+          "segmentation_status": "under_segmented_merging"
+        },
+        "failures": [
+          "excessive_clipping_24.0pct",
+          "character_merging"
+        ]
+      },
+      "cls_deployable": {
+        "param": 0.001,
+        "metrics": {
+          "rmse": 0.1584389668458646,
+          "psnr": 16.00275996441105,
+          "ssim": 0.5485014573038821
+        },
+        "runtime_ms": 2.2508000256493688,
+        "readability": {
+          "segmented_crops": 8,
+          "expected_chars": 10,
+          "segmentation_status": "under_segmented_merging"
+        },
+        "failures": [
+          "excessive_clipping_27.5pct",
+          "character_merging"
+        ]
+      },
+      "cls_oracle": {
+        "best_param": 0.001,
+        "metrics": {
+          "rmse": 0.1584389668458646,
+          "psnr": 16.00275996441105,
+          "ssim": 0.5485014573038821
+        },
+        "runtime_ms": 2.0044000120833516,
+        "readability": {
+          "segmented_crops": 8,
+          "expected_chars": 10,
+          "segmentation_status": "under_segmented_merging"
+        },
+        "failures": [
+          "excessive_clipping_27.5pct",
+          "character_merging"
+        ]
+      },
+      "richardson_lucy_deployable": {
+        "param": 20,
+        "metrics": {
+          "rmse": 0.2666144668148716,
+          "psnr": 11.482325779057689,
+          "ssim": 0.42661940343772786
+        },
+        "runtime_ms": 35.93540005385876,
+        "readability": {
+          "segmented_crops": 0,
+          "expected_chars": 10,
+          "segmentation_status": "failed_empty"
+        },
+        "failures": [
+          "excessive_clipping_19.4pct",
+          "failed_segmentation"
+        ]
+      },
+      "richardson_lucy_oracle": {
+        "best_param": 100,
+        "metrics": {
+          "rmse": 0.2281744767192248,
+          "psnr": 12.834658735598216,
+          "ssim": 0.4510433931437492
+        },
+        "runtime_ms": 166.96870001032948,
+        "readability": {
+          "segmented_crops": 0,
+          "expected_chars": 10,
+          "segmentation_status": "failed_empty"
+        },
+        "failures": [
+          "excessive_clipping_22.2pct",
+          "failed_segmentation"
+        ]
+      }
+    }
+  },
+  {
+    "cell_id": "C11",
+    "trial_idx": 18,
+    "plate_idx": 18,
+    "text": "KL 89 GF 7141",
+    "degraded": {
+      "metrics": {
+        "rmse": 0.300725518844419,
+        "psnr": 10.43659434300614,
+        "ssim": 0.4076191013851128
+      },
+      "readability": {
+        "segmented_crops": 0,
+        "expected_chars": 10,
+        "segmentation_status": "failed_empty"
+      },
+      "measured_bsnr": null
+    },
+    "restorations": {
+      "wiener_deployable": {
+        "param": 0.001,
+        "metrics": {
+          "rmse": 0.16115416410579658,
+          "psnr": 15.855169363094388,
+          "ssim": 0.5135645330144556
+        },
+        "runtime_ms": 2.1337999496608973,
+        "readability": {
+          "segmented_crops": 6,
+          "expected_chars": 10,
+          "segmentation_status": "under_segmented_merging"
+        },
+        "failures": [
+          "excessive_clipping_25.0pct",
+          "character_merging"
+        ]
+      },
+      "wiener_oracle": {
+        "best_param": 0.001,
+        "metrics": {
+          "rmse": 0.16115416410579658,
+          "psnr": 15.855169363094388,
+          "ssim": 0.5135645330144556
+        },
+        "runtime_ms": 1.4684000052511692,
+        "readability": {
+          "segmented_crops": 6,
+          "expected_chars": 10,
+          "segmentation_status": "under_segmented_merging"
+        },
+        "failures": [
+          "excessive_clipping_25.0pct",
+          "character_merging"
+        ]
+      },
+      "cls_deployable": {
+        "param": 0.001,
+        "metrics": {
+          "rmse": 0.15058574285535253,
+          "psnr": 16.444322885727903,
+          "ssim": 0.5470152112364672
+        },
+        "runtime_ms": 2.8667000588029623,
+        "readability": {
+          "segmented_crops": 10,
+          "expected_chars": 10,
+          "segmentation_status": "exact_match"
+        },
+        "failures": [
+          "excessive_clipping_28.1pct"
+        ]
+      },
+      "cls_oracle": {
+        "best_param": 0.001,
+        "metrics": {
+          "rmse": 0.15058574285535253,
+          "psnr": 16.444322885727903,
+          "ssim": 0.5470152112364672
+        },
+        "runtime_ms": 2.4556999560445547,
+        "readability": {
+          "segmented_crops": 10,
+          "expected_chars": 10,
+          "segmentation_status": "exact_match"
+        },
+        "failures": [
+          "excessive_clipping_28.1pct"
+        ]
+      },
+      "richardson_lucy_deployable": {
+        "param": 20,
+        "metrics": {
+          "rmse": 0.2556182587241265,
+          "psnr": 11.848162558009726,
+          "ssim": 0.44961961032575704
+        },
+        "runtime_ms": 32.978300005197525,
+        "readability": {
+          "segmented_crops": 0,
+          "expected_chars": 10,
+          "segmentation_status": "failed_empty"
+        },
+        "failures": [
+          "excessive_clipping_20.2pct",
+          "failed_segmentation"
+        ]
+      },
+      "richardson_lucy_oracle": {
+        "best_param": 100,
+        "metrics": {
+          "rmse": 0.2162043425213815,
+          "psnr": 13.302711747512294,
+          "ssim": 0.47063177057362293
+        },
+        "runtime_ms": 166.22400004416704,
+        "readability": {
+          "segmented_crops": 1,
+          "expected_chars": 10,
+          "segmentation_status": "under_segmented_merging"
+        },
+        "failures": [
+          "excessive_clipping_23.3pct",
+          "character_merging"
+        ]
+      }
+    }
+  },
+  {
+    "cell_id": "C11",
+    "trial_idx": 19,
+    "plate_idx": 19,
+    "text": "SK 04 CK 8326",
+    "degraded": {
+      "metrics": {
+        "rmse": 0.31571715751329116,
+        "psnr": 10.014036318388156,
+        "ssim": 0.3784862917485375
+      },
+      "readability": {
+        "segmented_crops": 0,
+        "expected_chars": 10,
+        "segmentation_status": "failed_empty"
+      },
+      "measured_bsnr": null
+    },
+    "restorations": {
+      "wiener_deployable": {
+        "param": 0.001,
+        "metrics": {
+          "rmse": 0.18050921895420488,
+          "psnr": 14.870012258690126,
+          "ssim": 0.4973192789248898
+        },
+        "runtime_ms": 2.7049999916926026,
+        "readability": {
+          "segmented_crops": 0,
+          "expected_chars": 10,
+          "segmentation_status": "failed_empty"
+        },
+        "failures": [
+          "excessive_clipping_22.6pct",
+          "failed_segmentation"
+        ]
+      },
+      "wiener_oracle": {
+        "best_param": 0.001,
+        "metrics": {
+          "rmse": 0.18050921895420488,
+          "psnr": 14.870012258690126,
+          "ssim": 0.4973192789248898
+        },
+        "runtime_ms": 1.4191999798640609,
+        "readability": {
+          "segmented_crops": 0,
+          "expected_chars": 10,
+          "segmentation_status": "failed_empty"
+        },
+        "failures": [
+          "excessive_clipping_22.6pct",
+          "failed_segmentation"
+        ]
+      },
+      "cls_deployable": {
+        "param": 0.001,
+        "metrics": {
+          "rmse": 0.1646941967152182,
+          "psnr": 15.666434073552246,
+          "ssim": 0.5425954302448316
+        },
+        "runtime_ms": 2.2547999396920204,
+        "readability": {
+          "segmented_crops": 8,
+          "expected_chars": 10,
+          "segmentation_status": "under_segmented_merging"
+        },
+        "failures": [
+          "excessive_clipping_25.8pct",
+          "character_merging"
+        ]
+      },
+      "cls_oracle": {
+        "best_param": 0.001,
+        "metrics": {
+          "rmse": 0.1646941967152182,
+          "psnr": 15.666434073552246,
+          "ssim": 0.5425954302448316
+        },
+        "runtime_ms": 1.860800082795322,
+        "readability": {
+          "segmented_crops": 8,
+          "expected_chars": 10,
+          "segmentation_status": "under_segmented_merging"
+        },
+        "failures": [
+          "excessive_clipping_25.8pct",
+          "character_merging"
+        ]
+      },
+      "richardson_lucy_deployable": {
+        "param": 20,
+        "metrics": {
+          "rmse": 0.27642315398305667,
+          "psnr": 11.168511640868568,
+          "ssim": 0.42001093728724465
+        },
+        "runtime_ms": 31.388700008392334,
+        "readability": {
+          "segmented_crops": 0,
+          "expected_chars": 10,
+          "segmentation_status": "failed_empty"
+        },
+        "failures": [
+          "excessive_clipping_18.5pct",
+          "failed_segmentation"
+        ]
+      },
+      "richardson_lucy_oracle": {
+        "best_param": 100,
+        "metrics": {
+          "rmse": 0.2394301472393471,
+          "psnr": 12.416423347983441,
+          "ssim": 0.4398554195595132
+        },
+        "runtime_ms": 162.8266000188887,
+        "readability": {
+          "segmented_crops": 0,
+          "expected_chars": 10,
+          "segmentation_status": "failed_empty"
+        },
+        "failures": [
+          "excessive_clipping_21.1pct",
+          "failed_segmentation"
+        ]
+      }
+    }
+  }
+]
