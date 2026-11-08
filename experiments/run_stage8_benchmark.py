@@ -48,6 +48,7 @@ from experiments.stage8_utils import (
     compute_interior_rmse,
     compute_interior_ssim,
     compute_paired_statistics,
+    compute_pairwise_algorithm_comparisons,
     crop_interior,
     evaluate_readability_proxy,
     generate_paired_degradation,
@@ -445,6 +446,7 @@ class Stage8BenchmarkRunner:
             "num_samples": self.num_samples,
             "metrics": {},
             "paired_tests_vs_degraded": {},
+            "paired_tests_algorithm_comparisons": {},
         }
 
         for k, v in metric_series.items():
@@ -461,6 +463,11 @@ class Stage8BenchmarkRunner:
                 summary["paired_tests_vs_degraded"][k] = compute_paired_statistics(
                     v["psnr"], metric_series["degraded"]["psnr"]
                 )
+
+        # Algorithm-to-algorithm paired comparisons
+        summary["paired_tests_algorithm_comparisons"] = compute_pairwise_algorithm_comparisons(
+            metric_series, methods
+        )
 
         # Save cell raw JSON
         cell_raw_path = self.dir_raw / f"raw_{cell_id}.json"
@@ -498,6 +505,86 @@ class Stage8BenchmarkRunner:
             json.dump(full_results, f, indent=2)
 
         self.export_csv_tables(full_results)
+        return full_results
+
+    def reaggregate_from_existing_raw(self) -> dict[str, Any]:
+        """Re-aggregate summary statistics and algorithm comparisons from existing raw JSONs.
+
+        Preserves all 320 existing raw trial records and deconvolution outputs
+        without running new restoration experiments.
+        """
+        print("=" * 75)
+        print("  RE-AGGREGATING STAGE 8 BENCHMARK RESULTS FROM EXISTING RAW RECORDS")
+        print("=" * 75)
+
+        full_results = {}
+        for cell_id in sorted(CORE_CELLS):
+            cfg = CORE_CELLS[cell_id]
+            cell_raw_path = self.dir_raw / f"raw_{cell_id}.json"
+            if not cell_raw_path.is_file():
+                raise FileNotFoundError(f"Missing raw records for cell {cell_id} at {cell_raw_path}")
+
+            with open(cell_raw_path, "r", encoding="utf-8") as f:
+                cell_raw_records = json.load(f)
+
+            methods = cfg["methods"]
+            metric_series: dict[str, dict[str, list[float]]] = {
+                "degraded": {"rmse": [], "psnr": [], "ssim": []}
+            }
+            for m in methods:
+                metric_series[f"{m}_deployable"] = {"rmse": [], "psnr": [], "ssim": [], "runtime_ms": []}
+                if m in ORACLE_SEARCH_GRIDS:
+                    metric_series[f"{m}_oracle"] = {"rmse": [], "psnr": [], "ssim": [], "runtime_ms": []}
+
+            for trial in cell_raw_records:
+                deg_m = trial["degraded"]["metrics"]
+                metric_series["degraded"]["rmse"].append(deg_m["rmse"])
+                metric_series["degraded"]["psnr"].append(deg_m["psnr"])
+                metric_series["degraded"]["ssim"].append(deg_m["ssim"])
+
+                for mkey, mval in trial["restorations"].items():
+                    if mkey in metric_series:
+                        m_data = mval["metrics"]
+                        metric_series[mkey]["rmse"].append(m_data["rmse"])
+                        metric_series[mkey]["psnr"].append(m_data["psnr"])
+                        metric_series[mkey]["ssim"].append(m_data["ssim"])
+                        metric_series[mkey]["runtime_ms"].append(mval.get("runtime_ms", 0.0))
+
+            summary: dict[str, Any] = {
+                "cell_id": cell_id,
+                "description": cfg["description"],
+                "num_samples": len(cell_raw_records),
+                "metrics": {},
+                "paired_tests_vs_degraded": {},
+                "paired_tests_algorithm_comparisons": {},
+            }
+
+            for k, v in metric_series.items():
+                summary["metrics"][k] = {
+                    "rmse": aggregate_metric_records(v["rmse"]),
+                    "psnr": aggregate_metric_records(v["psnr"]),
+                    "ssim": aggregate_metric_records(v["ssim"]),
+                }
+                if "runtime_ms" in v:
+                    summary["metrics"][k]["runtime_ms"] = aggregate_metric_records(v["runtime_ms"])
+
+                if k != "degraded":
+                    summary["paired_tests_vs_degraded"][k] = compute_paired_statistics(
+                        v["psnr"], metric_series["degraded"]["psnr"]
+                    )
+
+            summary["paired_tests_algorithm_comparisons"] = compute_pairwise_algorithm_comparisons(
+                metric_series, methods
+            )
+            full_results[cell_id] = summary
+
+        # Save aggregated JSON
+        agg_path = self.dir_agg / "aggregated_core_matrix.json"
+        with open(agg_path, "w", encoding="utf-8") as f:
+            json.dump(full_results, f, indent=2)
+
+        self.export_csv_tables(full_results)
+        print(f"\n[Re-aggregate] Successfully updated {agg_path}")
         return full_results
 
     def export_csv_tables(self, full_results: dict[str, Any]) -> None:
@@ -929,6 +1016,8 @@ def main() -> None:
                         help="Number of paired plate trials per cell (default 20).")
     parser.add_argument("--quick", action="store_true",
                         help="Quick smoke run (samples=2).")
+    parser.add_argument("--reaggregate-only", action="store_true",
+                        help="Re-aggregate statistics from existing raw records without re-running restorations.")
     parser.add_argument("--skip-figures", action="store_true",
                         help="Skip figure generation.")
     parser.add_argument("--out-dir", type=str, default="experiments/results/stage8",
@@ -943,6 +1032,41 @@ def main() -> None:
     print("=" * 75)
 
     runner = Stage8BenchmarkRunner(out_dir=out_dir, num_samples=num_samples)
+
+    if args.reaggregate_only:
+        hw_path = runner.dir_meta / "hardware_environment.json"
+        if hw_path.is_file():
+            with open(hw_path, "r", encoding="utf-8") as f:
+                hw_meta = json.load(f)
+        else:
+            hw_meta = collect_hardware_metadata()
+
+        core_results = runner.reaggregate_from_existing_raw()
+
+        ext_path = runner.dir_agg / "extensions_results.json"
+        if ext_path.is_file():
+            with open(ext_path, "r", encoding="utf-8") as f:
+                ext_results = json.load(f)
+        else:
+            ext_results = runner.run_extensions()
+
+        # Update Master Summary JSON
+        master_summary = {
+            "metadata": {
+                "stage": "8.10",
+                "timestamp": time.strftime("%Y-%m-%dT%H:%M:%SZ", time.gmtime()),
+                "num_samples_per_cell": num_samples,
+                "hardware": hw_meta,
+                "status": "reaggregated_with_pairwise_algorithm_comparisons",
+            },
+            "core_benchmark": core_results,
+            "extensions": ext_results,
+        }
+        master_path = out_dir / "summary.json"
+        with open(master_path, "w", encoding="utf-8") as f:
+            json.dump(master_summary, f, indent=2)
+        print(f"\n[Complete] Master summary JSON updated at {master_path}")
+        return
 
     # 1. Hardware Metadata
     hw_meta = collect_hardware_metadata()

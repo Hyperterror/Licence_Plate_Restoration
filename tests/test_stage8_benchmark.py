@@ -2,6 +2,8 @@
 
 from __future__ import annotations
 
+import json
+
 import numpy as np
 import pytest
 
@@ -13,9 +15,12 @@ from experiments.stage8_utils import (
     compute_interior_rmse,
     compute_interior_ssim,
     compute_paired_statistics,
+    compute_paired_ttest_detailed,
+    compute_pairwise_algorithm_comparisons,
     crop_interior,
     evaluate_readability_proxy,
     generate_paired_degradation,
+    holm_bonferroni_correction,
     make_benchmark_psf,
     run_single_restoration,
 )
@@ -186,4 +191,150 @@ def test_paired_statistics() -> None:
     assert agg["mean"] == 3.0
     assert agg["min"] == 1.0
     assert agg["max"] == 5.0
+
+
+def test_paired_ttest_detailed_direction() -> None:
+    vals_a = [10.0, 11.5, 12.0, 9.5, 10.5]
+    vals_b = [8.0, 9.0, 10.0, 8.0, 9.0]
+    res_ab = compute_paired_ttest_detailed(vals_a, vals_b, name_a="method_a", name_b="method_b")
+
+    assert res_ab["comparison"] == "method_a - method_b"
+    assert res_ab["mean_diff"] > 0.0
+    assert res_ab["t_stat"] > 0.0
+    assert res_ab["df"] == 4
+    assert 0.0 <= res_ab["p_val"] <= 1.0
+
+    # Opposite direction: B - A
+    res_ba = compute_paired_ttest_detailed(vals_b, vals_a, name_a="method_b", name_b="method_a")
+    assert res_ba["comparison"] == "method_b - method_a"
+    assert np.isclose(res_ba["mean_diff"], -res_ab["mean_diff"])
+    assert np.isclose(res_ba["t_stat"], -res_ab["t_stat"])
+    assert np.isclose(res_ba["p_val"], res_ab["p_val"])
+
+
+def test_paired_ttest_detailed_sample_count_and_ci() -> None:
+    rng = np.random.default_rng(42)
+    a = rng.normal(30.0, 2.0, 20).tolist()
+    b = (np.array(a) - 3.5 + rng.normal(0, 0.5, 20)).tolist()
+
+    res = compute_paired_ttest_detailed(a, b, name_a="rl", name_b="wiener")
+    assert res["sample_count"] == 20
+    assert res["df"] == 19
+    assert res["ci_95"] is not None
+    ci_low, ci_high = res["ci_95"]
+    assert ci_low < res["mean_diff"] < ci_high
+    assert res["p_val"] < 1e-10
+
+
+def test_paired_ttest_detailed_zero_variance() -> None:
+    # Identical arrays -> zero variance, zero mean diff
+    a = [5.0, 5.0, 5.0, 5.0]
+    res_zero = compute_paired_ttest_detailed(a, a, name_a="a", name_b="a")
+    assert res_zero["std_diff"] == 0.0
+    assert res_zero["mean_diff"] == 0.0
+    assert res_zero["t_stat"] == 0.0
+    assert res_zero["p_val"] == 1.0
+    assert res_zero["ci_95"] == [0.0, 0.0]
+
+    # Constant shift -> zero variance, non-zero mean diff
+    b = [3.0, 3.0, 3.0, 3.0]
+    res_shift = compute_paired_ttest_detailed(a, b, name_a="a", name_b="b")
+    assert res_shift["std_diff"] == 0.0
+    assert res_shift["mean_diff"] == 2.0
+    assert res_shift["t_stat"] == float("inf")
+    assert res_shift["p_val"] == 0.0
+    assert res_shift["ci_95"] == [2.0, 2.0]
+
+
+def test_holm_bonferroni_correction() -> None:
+    # Empty list
+    assert holm_bonferroni_correction([]) == []
+
+    # Known family of p-values
+    p_raw = [0.01, 0.04, 0.03]
+    # Sorted: p(1)=0.01 (m=3 -> 0.03)
+    #         p(2)=0.03 (m=2 -> 0.06)
+    #         p(3)=0.04 (m=1 -> 0.04 -> monotonic max becomes 0.06)
+    p_adj = holm_bonferroni_correction(p_raw)
+    assert np.isclose(p_adj[0], 0.03)
+    assert np.isclose(p_adj[1], 0.06)
+    assert np.isclose(p_adj[2], 0.06)
+
+    # Monotonicity check
+    p_large = [0.6, 0.9, 0.7]
+    adj_large = holm_bonferroni_correction(p_large)
+    for p in adj_large:
+        assert 0.0 <= p <= 1.0
+
+
+def test_compute_pairwise_algorithm_comparisons_and_serialization() -> None:
+    rng = np.random.default_rng(123)
+    metric_series = {
+        "inverse_deployable": {"psnr": rng.normal(15.0, 1.0, 20).tolist()},
+        "wiener_deployable": {"psnr": rng.normal(25.0, 1.0, 20).tolist()},
+        "cls_deployable": {"psnr": rng.normal(27.0, 1.0, 20).tolist()},
+        "richardson_lucy_deployable": {"psnr": rng.normal(26.5, 1.0, 20).tolist()},
+    }
+    methods = ["inverse", "wiener", "cls", "richardson_lucy"]
+
+    comps = compute_pairwise_algorithm_comparisons(metric_series, methods)
+
+    # Should contain all 6 comparisons
+    expected_pairs = [
+        "inverse_vs_wiener",
+        "inverse_vs_cls",
+        "inverse_vs_richardson_lucy",
+        "wiener_vs_cls",
+        "wiener_vs_richardson_lucy",
+        "cls_vs_richardson_lucy",
+    ]
+    for pair in expected_pairs:
+        assert pair in comps
+        assert "p_val_adjusted_holm" in comps[pair]
+        assert "significant_holm_05" in comps[pair]
+
+    # Check strict JSON serializability (must not raise TypeError for float32 or int64)
+    serialized = json.dumps(comps)
+    assert isinstance(serialized, str)
+    deserialized = json.loads(serialized)
+    assert "cls_vs_richardson_lucy" in deserialized
+
+
+def test_compute_pairwise_algorithm_comparisons_missing_method() -> None:
+    # Simulating Poisson condition where inverse filter is omitted
+    rng = np.random.default_rng(456)
+    metric_series = {
+        "wiener_deployable": {"psnr": rng.normal(20.0, 1.0, 20).tolist()},
+        "cls_deployable": {"psnr": rng.normal(28.0, 1.0, 20).tolist()},
+        "richardson_lucy_deployable": {"psnr": rng.normal(30.0, 1.0, 20).tolist()},
+    }
+    methods = ["wiener", "cls", "richardson_lucy"]
+
+    comps = compute_pairwise_algorithm_comparisons(metric_series, methods)
+
+    # Should only contain the 3 valid pairs among available methods
+    assert "inverse_vs_wiener" not in comps
+    assert "inverse_vs_cls" not in comps
+    assert "wiener_vs_cls" in comps
+    assert "wiener_vs_richardson_lucy" in comps
+    assert "cls_vs_richardson_lucy" in comps
+    assert len(comps) == 3
+
+
+def test_summary_json_contains_both_paired_tests() -> None:
+    from pathlib import Path
+    summary_path = Path("experiments/results/stage8/summary.json")
+    if not summary_path.exists():
+        pytest.skip("summary.json not present on disk")
+
+    with open(summary_path, encoding="utf-8") as f:
+        summary_data = json.load(f)
+
+    # Check that both paired tests sections exist across cells in core_benchmark
+    core_benchmark = summary_data.get("core_benchmark", {})
+    assert len(core_benchmark) == 16, f"Expected 16 core cells, got {len(core_benchmark)}"
+
+    for cell_key, cell_data in core_benchmark.items():
+        assert "paired_tests_vs_degraded" in cell_data, f"{cell_key} missing paired_tests_vs_degraded"
+        assert "paired_tests_algorithm_comparisons" in cell_data, f"{cell_key} missing paired_tests_algorithm_comparisons"
 

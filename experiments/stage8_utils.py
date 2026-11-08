@@ -458,38 +458,211 @@ def aggregate_metric_records(values: list[float]) -> dict[str, float]:
 def compute_paired_statistics(vals_a: list[float],
                               vals_b: list[float]) -> dict[str, float]:
     """Compute paired differences (A - B), mean difference, and paired t-stat."""
-    a = np.array(vals_a, dtype=np.float64)
-    b = np.array(vals_b, dtype=np.float64)
+    res = compute_paired_ttest_detailed(vals_a, vals_b)
+    return {
+        "mean_diff": res["mean_diff"],
+        "std_diff": res["std_diff"],
+        "t_stat": res["t_stat"],
+        "p_val": res["p_val"] if res["p_val"] is not None else 1.0,
+    }
+
+
+def compute_paired_ttest_detailed(
+    vals_a: list[float] | np.ndarray,
+    vals_b: list[float] | np.ndarray,
+    name_a: str = "method_a",
+    name_b: str = "method_b",
+) -> dict[str, Any]:
+    """Compute exact two-sided paired Student's t-test (method A - method B).
+
+    Parameters
+    ----------
+    vals_a:
+        Metrics for method A across paired trials.
+    vals_b:
+        Metrics for method B across the same paired trials.
+    name_a:
+        Identifier for method A.
+    name_b:
+        Identifier for method B.
+
+    Returns
+    -------
+    dict[str, Any]
+        Detailed paired comparison statistics, including df, 95% CI, and exact two-sided p-value.
+    """
+    a = np.asarray(vals_a, dtype=np.float64)
+    b = np.asarray(vals_b, dtype=np.float64)
     if a.size != b.size or a.size < 2:
-        return {"mean_diff": 0.0, "std_diff": 0.0, "t_stat": 0.0, "p_val": 1.0}
+        return {
+            "comparison": f"{name_a} - {name_b}",
+            "method_a": name_a,
+            "method_b": name_b,
+            "sample_count": int(a.size),
+            "mean_diff": 0.0,
+            "std_diff": 0.0,
+            "sem": 0.0,
+            "t_stat": 0.0,
+            "df": max(0, int(a.size - 1)),
+            "p_val": 1.0,
+            "ci_95": [0.0, 0.0],
+        }
 
     diff = a - b
+    n = int(a.size)
+    df = n - 1
     mean_d = float(np.mean(diff))
     std_d = float(np.std(diff, ddof=1))
+    sem = float(std_d / np.sqrt(n))
 
+    # Zero-variance handling
     if std_d < 1e-12:
-        t_stat = 0.0
-        p_val = 1.0
-    else:
-        t_stat = float(mean_d / (std_d / np.sqrt(a.size)))
-        # compute p-value via regularized incomplete beta / erf approximation
-        # using scipy if available, else standard normal approximation
-        try:
-            from scipy import stats
-            res = stats.ttest_rel(a, b)
-            p_val = float(res.pvalue)
-            t_stat = float(res.statistic)
-        except ImportError:
-            # fallback approximation for p-value using normal distribution
-            z = abs(t_stat)
-            p_val = float(2.0 * (1.0 - 0.5 * (1.0 + np.math.erf(z / np.sqrt(2.0)))))
+        if abs(mean_d) < 1e-12:
+            return {
+                "comparison": f"{name_a} - {name_b}",
+                "method_a": name_a,
+                "method_b": name_b,
+                "sample_count": n,
+                "mean_diff": 0.0,
+                "std_diff": 0.0,
+                "sem": 0.0,
+                "t_stat": 0.0,
+                "df": df,
+                "p_val": 1.0,
+                "ci_95": [0.0, 0.0],
+            }
+        else:
+            t_stat = float("inf") if mean_d > 0 else float("-inf")
+            return {
+                "comparison": f"{name_a} - {name_b}",
+                "method_a": name_a,
+                "method_b": name_b,
+                "sample_count": n,
+                "mean_diff": mean_d,
+                "std_diff": 0.0,
+                "sem": 0.0,
+                "t_stat": t_stat,
+                "df": df,
+                "p_val": 0.0,
+                "ci_95": [mean_d, mean_d],
+            }
+
+    # Genuine two-sided paired Student t-test using SciPy
+    try:
+        from scipy import stats
+        res = stats.ttest_rel(a, b)
+        t_stat = float(res.statistic)
+        p_val = float(res.pvalue)
+        t_crit = float(stats.t.ppf(0.975, df=df))
+        ci_95 = [float(mean_d - t_crit * sem), float(mean_d + t_crit * sem)]
+    except ImportError:
+        # If SciPy is unavailable, calculate t_stat but mark inferential p-value unavailable
+        t_stat = float(mean_d / sem)
+        p_val = None
+        ci_95 = None
 
     return {
+        "comparison": f"{name_a} - {name_b}",
+        "method_a": name_a,
+        "method_b": name_b,
+        "sample_count": n,
         "mean_diff": mean_d,
         "std_diff": std_d,
+        "sem": sem,
         "t_stat": t_stat,
+        "df": df,
         "p_val": p_val,
+        "ci_95": ci_95,
     }
+
+
+def holm_bonferroni_correction(p_values: list[float]) -> list[float]:
+    """Apply Holm-Bonferroni step-down correction to control family-wise error rate.
+
+    Parameters
+    ----------
+    p_values:
+        List of unadjusted p-values for a family of hypotheses.
+
+    Returns
+    -------
+    list[float]
+        Monotonically adjusted p-values bounded by [0.0, 1.0].
+    """
+    m = len(p_values)
+    if m == 0:
+        return []
+
+    order = np.argsort(p_values)
+    sorted_p = np.array(p_values)[order]
+
+    adjusted = np.empty(m, dtype=np.float64)
+    running_max = 0.0
+    for k in range(m):
+        multiplier = m - k
+        val = min(1.0, sorted_p[k] * multiplier)
+        running_max = max(running_max, val)
+        adjusted[k] = min(1.0, running_max)
+
+    out = np.empty(m, dtype=np.float64)
+    out[order] = adjusted
+    return [float(x) for x in out]
+
+
+ALGORITHM_PAIRWISE_ORDER = [
+    ("inverse", "wiener"),
+    ("inverse", "cls"),
+    ("inverse", "richardson_lucy"),
+    ("wiener", "cls"),
+    ("wiener", "richardson_lucy"),
+    ("cls", "richardson_lucy"),
+]
+
+
+def compute_pairwise_algorithm_comparisons(
+    metric_series: dict[str, dict[str, list[float]]],
+    methods: list[str],
+) -> dict[str, Any]:
+    """Compute paired Student t-tests between all applicable deployable restoration methods.
+
+    Parameters
+    ----------
+    metric_series:
+        Dictionary holding per-trial metrics (e.g. "wiener_deployable": {"psnr": [...]})
+    methods:
+        List of methods evaluated in the cell (e.g. ["inverse", "wiener", "cls", "richardson_lucy"])
+
+    Returns
+    -------
+    dict[str, Any]
+        Dictionary of paired comparisons with unadjusted and Holm-Bonferroni adjusted p-values.
+    """
+    results: dict[str, Any] = {}
+    pair_keys = []
+    p_vals = []
+
+    for m_a, m_b in ALGORITHM_PAIRWISE_ORDER:
+        key_a = f"{m_a}_deployable"
+        key_b = f"{m_b}_deployable"
+        if key_a in metric_series and key_b in metric_series:
+            vals_a = metric_series[key_a]["psnr"]
+            vals_b = metric_series[key_b]["psnr"]
+            comp_key = f"{m_a}_vs_{m_b}"
+            stats_dict = compute_paired_ttest_detailed(vals_a, vals_b, name_a=key_a, name_b=key_b)
+            results[comp_key] = stats_dict
+            pair_keys.append(comp_key)
+            if stats_dict["p_val"] is not None:
+                p_vals.append(stats_dict["p_val"])
+
+    # Apply Holm-Bonferroni multiple-comparison correction across the family of tests
+    if p_vals and len(p_vals) == len(pair_keys):
+        adj_p = holm_bonferroni_correction(p_vals)
+        for k, p_adj in zip(pair_keys, adj_p):
+            results[k]["p_val_adjusted_holm"] = p_adj
+            results[k]["significant_holm_05"] = bool(p_adj < 0.05)
+            results[k]["correction_method"] = "Holm-Bonferroni step-down"
+
+    return results
 
 
 # --------------------------------------------------------------------------- #
