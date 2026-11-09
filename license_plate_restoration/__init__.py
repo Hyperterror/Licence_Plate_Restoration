@@ -4,6 +4,7 @@ Stages owned by this module set
 -------------------------------
 Step 1  Clean plate acquisition : renderer, ccpd_loader, dataset_writer
 Step 2  Degradation            : psf_builder, degradation
+Step 4  Restoration (foundation): restoration
 Step 5  Binarization           : binarizer
 
 Forward model implemented by steps 1-2::
@@ -28,7 +29,9 @@ Hand-off contract (settled -- consume as-is, do not re-derive)
   has white text on a dark field.
 * ``<key>_psf`` in ``degraded.npz`` is already resolution-matched to its
   ``<key>_img``; a ``downsample_factor == 2`` image comes with a roughly
-  half-width kernel.
+  half-width kernel.  That kernel is ``effective_psf(combined, 2)``, so its
+  side length is ``L + r`` and it is **even** for about half of the grid --
+  the odd-size convention holds for full-resolution kernels only.
 * ``make_motion_psf(length, angle)`` takes a *half*-length, so ``length=15``
   is a 31 px smear.
 * ``add_noise`` calibrates its amplitude after clipping
@@ -46,5 +49,6 @@ __all__ = [
     "dataset_writer",
     "psf_builder",
     "degradation",
+    "restoration",
     "binarizer",
 ]

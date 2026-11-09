@@ -1,0 +1,17 @@
+cell_id,description,wiener_oracle_psnr_mean,wiener_oracle_ssim_mean,cls_oracle_psnr_mean,cls_oracle_ssim_mean,rl_oracle_psnr_mean,rl_oracle_ssim_mean
+C01,"Full-res, 7x7 blur, Clean (Noiseless)",43.0002,0.9897,36.4381,0.9822,28.3705,0.9574
+C02,"Full-res, 7x7 blur, Gaussian 30 dB BSNR",24.9921,0.8372,26.2119,0.8658,25.6847,0.8824
+C03,"Full-res, 7x7 blur, Gaussian 20 dB BSNR",21.0485,0.5877,22.8923,0.7883,22.4306,0.7278
+C04,"Full-res, 7x7 blur, Poisson N=1000 (N_eff=700)",20.6531,0.5383,23.0227,0.7588,23.4293,0.6800
+C05,"Full-res, 7x7 blur, Poisson N=5000 (N_eff=3500)",24.0848,0.7093,25.1624,0.7429,25.8283,0.7828
+C06,"Full-res, 7x7 blur, Poisson N=20000 (N_eff=14000)",25.2959,0.8369,26.6149,0.8728,27.2641,0.8489
+C07,"Full-res, 51x51 blur, Clean (Noiseless)",17.1978,0.6342,16.8043,0.6360,12.7760,0.4755
+C08,"Full-res, 51x51 blur, Gaussian 30 dB BSNR",15.9903,0.4674,16.4510,0.6075,12.7724,0.4673
+C09,"Full-res, 51x51 blur, Gaussian 20 dB BSNR",14.9716,0.4695,15.3187,0.5309,12.7313,0.4317
+C10,"Full-res, 51x51 blur, Poisson N=1000 (N_eff=700)",14.2874,0.3763,14.6348,0.5200,12.6697,0.3853
+C11,"Full-res, 51x51 blur, Poisson N=5000 (N_eff=3500)",15.1835,0.5032,15.6822,0.5368,12.7520,0.4506
+C12,"Full-res, 51x51 blur, Poisson N=20000 (N_eff=14000)",15.6221,0.4531,16.3188,0.6019,12.7697,0.4686
+C13,"Decimated (F2), Small blur, Gaussian 30 dB BSNR",26.5821,0.9509,27.3848,0.9704,28.4126,0.9760
+C14,"Decimated (F2), Small blur, Gaussian 20 dB BSNR",21.3831,0.8346,24.1331,0.9330,24.4627,0.9150
+C15,"Decimated (F2), Large blur, Gaussian 30 dB BSNR",16.6704,0.7399,17.5003,0.7635,13.5692,0.5540
+C16,"Decimated (F2), Large blur, Gaussian 20 dB BSNR",15.2486,0.6377,15.5703,0.6851,13.4699,0.5353
